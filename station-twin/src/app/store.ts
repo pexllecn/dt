@@ -4,11 +4,13 @@ import type { CommandResult } from '../sim/engine.ts';
 import type { ClockState } from '../sim/protocol.ts';
 import type { ComponentId, SimState } from '../sim/types.ts';
 import type { Theme } from '../scene/sky.ts';
+import type { Lens } from '../scene/stage.ts';
 
 export const snap = signal<SimState | null>(null);
 export const clock = signal<ClockState>({ compression: 120, effective: 120, paused: false });
 export const selected = signal<ComponentId | null>(null);
 export const theme = signal<Theme>('daylight');
+export const lens = signal<Lens>('physical');
 export const dockOpen = signal(true);
 export const logOpen = signal(true);
 export const debugOpen = signal(false);

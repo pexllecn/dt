@@ -25,6 +25,8 @@ function text(id: ComponentId, s: SimState): { name: string; value: string; cls:
   return { name, value: `${Math.abs(c.mwNow).toFixed(0)} MW`, cls: c.live ? '' : 'dead' };
 }
 
+const ARROW = '<svg viewBox="0 0 10 10"><path d="M1 5h7M5 1.8 8.3 5 5 8.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 export function attachLabels(stage: Stage, layer: HTMLElement, getState: () => SimState | null, getSelected: () => ComponentId | null, onClick: (id: ComponentId) => void): () => void {
   const els = new Map<ComponentId, HTMLElement>();
   for (const id of PRIORITY) {
@@ -36,9 +38,19 @@ export function attachLabels(stage: Stage, layer: HTMLElement, getState: () => S
     els.set(id, el);
   }
   const cache = new Map<ComponentId, string>();
+  // Static place labels (neighbour stations, the border), shown only at network scale.
+  const statics = stage.surroundings.staticLabels.map((l) => {
+    const el = document.createElement('div');
+    el.className = 'lbl place';
+    el.style.opacity = '0';
+    el.textContent = l.text;
+    layer.appendChild(el);
+    return { ...l, el };
+  });
   return () => {
     const s = getState();
     if (!s) return;
+    const far = stage.isNetworkScale();
     const sel = getSelected();
     const projected = stage.project(PRIORITY);
     const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
@@ -49,8 +61,9 @@ export function attachLabels(stage: Stage, layer: HTMLElement, getState: () => S
     for (const p of projected) {
       const el = els.get(p.id)!;
       const isBus = p.id.startsWith('BUS') || p.id === 'BS220';
-      const maxDist = isBus ? 260 : p.id === 'T1' || p.id === 'T2' || p.id === 'GRID' || p.id === 'LD_TOWN' ? 1600 : 700;
+      const maxDist = far ? (isBus || p.id === 'BS220' ? 0 : 12000) : isBus ? 260 : p.id === 'T1' || p.id === 'T2' || p.id === 'GRID' || p.id === 'LD_TOWN' ? 1600 : 700;
       let show = p.visible && (p.distance < maxDist || p.id === sel);
+      if (far && (p.id === 'T1' || p.id === 'T2' || p.id === 'T3' || p.id === 'T4' || !s.C[p.id].installed) && p.id !== sel) show = false;
       const w = 150;
       const box = { x0: p.x - w / 2, x1: p.x + w / 2, y0: p.y - 26, y1: p.y };
       if (show && placed.some((b) => b.x0 < box.x1 && b.x1 > box.x0 && b.y0 < box.y1 && b.y1 > box.y0)) show = false;
@@ -61,9 +74,22 @@ export function attachLabels(stage: Stage, layer: HTMLElement, getState: () => S
       el.style.left = `${p.x.toFixed(1)}px`;
       el.style.top = `${p.y.toFixed(1)}px`;
       const t = text(p.id, s);
-      const html = `<b>${t.name}</b><span class="num">${t.value}</span>`;
+      // Flow lens: an arrow turned to the on-screen direction of flow (snapped to 5 degrees so it does not churn).
+      const ang = stage.lens === 'flow' ? stage.flowArrow(p.id, p) : null;
+      const arrow = ang === null ? '' : `<i class="arr" style="transform:rotate(${Math.round((ang * 180) / Math.PI / 5) * 5}deg)">${ARROW}</i>`;
+      const html = `${arrow}<b>${t.name}</b><span class="num">${t.value}</span>`;
       const cls = `lbl ${t.cls} ${p.id === sel ? 'sel' : ''}`;
       if (cache.get(p.id) !== html + cls) { el.innerHTML = html; el.className = cls; cache.set(p.id, html + cls); }
+    }
+    for (const l of statics) {
+      const p = stage.projectPoint(l.pos);
+      let show = p.visible && p.distance > l.minDistance;
+      const w = l.text.length * 7 + 16;
+      const box = { x0: p.x - w / 2, x1: p.x + w / 2, y0: p.y - 22, y1: p.y };
+      if (show && placed.some((b) => b.x0 < box.x1 && b.x1 > box.x0 && b.y0 < box.y1 && b.y1 > box.y0)) show = false;
+      if (show) placed.push(box);
+      l.el.style.opacity = show ? '1' : '0';
+      if (show) { l.el.style.left = `${p.x.toFixed(1)}px`; l.el.style.top = `${p.y.toFixed(1)}px`; }
     }
   };
 }

@@ -2,7 +2,7 @@
 import { BRANDING } from '../config/branding.ts';
 import { CLOCK, RATINGS, SITE } from '../config/assumptions.ts';
 import { clockLabel, compressionLabel } from '../lib/format.ts';
-import { clock, methodOpen, snap, theme } from '../app/store.ts';
+import { clock, lens, methodOpen, snap, theme } from '../app/store.ts';
 import type { SimClient } from '../app/client.ts';
 import { Icon } from './icons.tsx';
 
@@ -62,8 +62,8 @@ export function TopStrip({ client }: { client: SimClient }) {
       </div>
       <div class="spacer" />
       <div class="lenses" role="tablist" aria-label="Lens">
-        <button class="on" role="tab" aria-selected="true" title="Physical (1)">Physical</button>
-        <button role="tab" disabled title="Flow lens arrives in milestone 4">Flow</button>
+        <button class={lens.value === 'physical' ? 'on' : ''} role="tab" aria-selected={lens.value === 'physical'} title="Physical (1)" onClick={() => (lens.value = 'physical')}>Physical</button>
+        <button class={lens.value === 'flow' ? 'on' : ''} role="tab" aria-selected={lens.value === 'flow'} title="Flow: power flow, loading and thermography (2)" onClick={() => (lens.value = 'flow')}>Flow</button>
         <button role="tab" disabled title="Circuit lens arrives in milestone 5">Circuit</button>
       </div>
       <button class="iconbtn" title="Method and assumptions (M)" aria-label="Method and assumptions" onClick={() => (methodOpen.value = true)}><Icon name="info" /></button>

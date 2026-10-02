@@ -40,6 +40,7 @@ class Collector {
         mesh.castShadow = mat !== 'gravel';
         mesh.receiveShadow = true;
         mesh.userData.owner = owner;
+        mesh.userData.matKey = mat;
         group.add(mesh);
         pickables.push(mesh);
       }
@@ -53,6 +54,22 @@ interface EarthArm { owner: Owner; base: THREE.Matrix4; angle: number; mesh: THR
 interface Lamp { owner: Owner; index: number }
 interface Fan { tx: TransformerId; stage: 1 | 2; base: THREE.Matrix4; angle: number; speed: number; index: number }
 
+export interface FlowPath {
+  /** Bay key (or 'BS220'); decides the sign convention for flow along the path. */
+  key: string;
+  owner: ComponentId;
+  pts: THREE.Vector3[];
+  length: number;
+}
+
+export interface LineStart {
+  key: string;
+  owner: ComponentId;
+  voltage: Voltage;
+  attach: THREE.Vector3[];
+  dir: THREE.Vector3;
+}
+
 export interface StationScene {
   group: THREE.Group;
   pickables: THREE.Object3D[];
@@ -60,8 +77,12 @@ export interface StationScene {
   bounds: Map<ComponentId, THREE.Box3>;
   /** Label anchor per component. */
   anchors: Map<ComponentId, THREE.Vector3>;
-  /** Conductor paths per component (world), for the Flow lens later. */
-  conductors: Map<ComponentId, THREE.Vector3[][]>;
+  /** Conductor paths (world, sampled along the sag), keyed by bay, for the Flow lens. */
+  paths: FlowPath[];
+  /** Where each overhead line leaves its gantry: phase attachment points and outward direction. */
+  lineStarts: LineStart[];
+  /** Cable bay ends (sealing ends), where buried cables leave the yard. */
+  cableEnds: { key: string; owner: ComponentId; at: THREE.Vector3; dir: number }[];
   update(state: SimState, dt: number, time: number): void;
 }
 
@@ -105,7 +126,9 @@ export function buildStation(materials: Materials): StationScene {
   const pickables: THREE.Object3D[] = [];
   const bounds = new Map<Owner, THREE.Box3>();
   const anchors = new Map<ComponentId, THREE.Vector3>();
-  const conductors = new Map<ComponentId, THREE.Vector3[][]>();
+  const paths: FlowPath[] = [];
+  const lineStarts: LineStart[] = [];
+  const cableEnds: StationScene['cableEnds'] = [];
   const col = new Collector();
 
   // Prototype caches.
@@ -137,16 +160,15 @@ export function buildStation(materials: Materials): StationScene {
   const bladeOwners: { v: Voltage; idx: number; blade: Omit<Blade, 'mesh' | 'index'> }[] = [];
   const arms: { base: THREE.Matrix4; owner: Owner; length: number }[] = [];
   const lamps: { pos: THREE.Vector3; owner: Owner }[] = [];
-  const addPath = (owner: Owner, pts: THREE.Vector3[]) => {
-    let l = conductors.get(owner);
-    if (!l) conductors.set(owner, (l = []));
-    l.push(pts);
-  };
+  let pathKey = '';
   const conductor = (owner: Owner, a: THREE.Vector3, b: THREE.Vector3, v: Voltage, sagFactor = 0.03) => {
     const r = v >= 275 ? 0.055 : v === 220 ? 0.045 : 0.035;
     const d = a.distanceTo(b);
-    col.add(owner, 'conductor', sagging(a, b, Math.min(1.6, 0.08 + d * sagFactor), r));
-    addPath(owner, [a.clone(), b.clone()]);
+    const sag = Math.min(1.6, 0.08 + d * sagFactor);
+    col.add(owner, 'conductor', sagging(a, b, sag, r));
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= 10; i++) { const t = i / 10; const p = new THREE.Vector3().lerpVectors(a, b, t); p.y -= sag * 4 * t * (1 - t); pts.push(p); }
+    paths.push({ key: pathKey, owner, pts, length: d });
   };
 
   // --- busbars ------------------------------------------------------------------------------
@@ -174,6 +196,7 @@ export function buildStation(materials: Materials): StationScene {
   const bayEnds = new Map<string, THREE.Vector3[]>();
 
   for (const bay of BAYS) {
+    pathKey = bay.key;
     const S = VOLTAGE[bay.voltage];
     const frame = bayFrame(bay);
     const items = sequence(bay);
@@ -229,6 +252,7 @@ export function buildStation(materials: Materials): StationScene {
     // Bay end: gantry, sealing end, or transformer bushings.
     const end = prevOut!;
     bayEnds.set(bay.key, end);
+    if (bay.kind === 'cable') cableEnds.push({ key: bay.key, owner: bay.owner, at: end[1]!.clone(), dir: bay.dir });
     const anchorLocal = new THREE.Vector3(bay.length, (lineBay ? S.gantry : S.support + S.insulator) + 3, 0).applyMatrix4(frame);
     if (!anchors.has(bay.owner)) anchors.set(bay.owner, anchorLocal);
     if (lineBay) {
@@ -239,6 +263,7 @@ export function buildStation(materials: Materials): StationScene {
         col.add(bay.owner, 'galvanised', g.clone().applyMatrix4(frame.clone().multiply(local(bay.length, s * halfW))));
       }
       col.add(bay.owner, 'galvanised', latticeBeam(halfW * 2 + 1, colW * 0.8, S.gantry).applyMatrix4(frame.clone().multiply(local(bay.length, 0))));
+      const attach: THREE.Vector3[] = [];
       for (let i = 0; i < 3; i++) {
         const o = PHASES[i]!;
         const att = new THREE.Vector3(bay.length + 0.6, S.gantry - 0.5, o * S.phase).applyMatrix4(frame);
@@ -251,15 +276,16 @@ export function buildStation(materials: Materials): StationScene {
           col.add(bay.owner, 'composite', rod(p.clone().sub(axis), p.clone().add(axis), bay.voltage >= 275 ? 0.15 : 0.12, 14));
         }
         // Down-lead to the last item, and the outgoing span to the line.
-        conductor(bay.owner, outer, end[i]!, bay.voltage, 0.05);
-        const far = new THREE.Vector3(bay.length + 70, S.gantry * 0.82, o * S.phase * 1.4).applyMatrix4(frame);
-        conductor(bay.owner, outer, far, bay.voltage, 0.012);
+        conductor(bay.owner, end[i]!, outer, bay.voltage, 0.05);
+        attach.push(outer);
       }
+      lineStarts.push({ key: bay.key, owner: bay.owner, voltage: bay.voltage, attach, dir: new THREE.Vector3(bay.dir, 0, 0) });
     }
   }
 
   // Transformer connections: last item of each transformer bay to its bushings.
   const connectTx = (bayKey: string, txId: TransformerId, side: 'hv' | 'lv') => {
+    pathKey = bayKey;
     const bay = BAYS.find((b) => b.key === bayKey)!;
     const ends = [...bayEnds.get(bayKey)!].sort((a, b) => a.z - b.z);
     const model = txModels.get(txId)!;
@@ -272,6 +298,7 @@ export function buildStation(materials: Materials): StationScene {
   connectTx('T4-220', 'T4', 'lv');
   {
     // T4's 275 kV bay starts at its HV bushings.
+    pathKey = 'T4-275';
     const bay = BAYS.find((b) => b.key === 'T4-275')!;
     const frame = bayFrame(bay);
     const first = sequence(bay)[0]!;
@@ -288,6 +315,7 @@ export function buildStation(materials: Materials): StationScene {
   for (const part of fireWall(-87, 0, 16, 8.5)) col.add('T1', part.mat, part.geo);
 
   // --- bus-section bay on the 220 kV busbar ----------------------------------------------------
+  pathKey = 'BS220';
   {
     const S = VOLTAGE[220];
     const frame = new THREE.Matrix4().compose(new THREE.Vector3(BUS_SECTION.x, 0, 0), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -Math.PI / 2, 0)), new THREE.Vector3(1, 1, 1));
@@ -419,5 +447,5 @@ export function buildStation(materials: Materials): StationScene {
   anchors.set('GRID', new THREE.Vector3(g1.busX - g1.length, VOLTAGE[400].gantry + 4, -44));
 
   void merge;
-  return { group, pickables, bounds, anchors, conductors, update };
+  return { group, pickables, bounds, anchors, paths, lineStarts, cableEnds, update };
 }
