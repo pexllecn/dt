@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "fixtures": "node tests/parity/generate-fixtures.mjs",
-    "e2e": "node tests/e2e/file-protocol.mjs"
+    "e2e": "node tests/e2e/file-protocol.mjs",
+    "shoot": "node tools/shoot.mjs"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
@@ -19,5 +20,14 @@
     "vite": "8.3.2",
     "vite-plugin-singlefile": "2.3.3",
     "vitest": "5.0.3"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/ibm-plex-sans": "5.3.0",
+    "@preact/signals": "2.11.3",
+    "@types/three": "0.186.0",
+    "camera-controls": "3.1.2",
+    "preact": "11.0.0",
+    "three": "0.186.1"
   }
 }

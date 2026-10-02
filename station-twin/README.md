@@ -6,7 +6,7 @@ This folder is self-contained and separate from the national twin work elsewhere
 
 ## Status
 
-Milestone 2 of 8 (simulation port) is complete. See [docs/PLAN.md](docs/PLAN.md) for the plan and [docs/milestones/M2.md](docs/milestones/M2.md) for the latest report.
+Milestones 2 (simulation) and 3 (station in 3D) are complete. See [docs/PLAN.md](docs/PLAN.md) for the plan and [docs/milestones/M2.md](docs/milestones/M2.md) for the latest report.
 
 ## Commands
 
@@ -29,3 +29,7 @@ Milestone 2 of 8 (simulation port) is complete. See [docs/PLAN.md](docs/PLAN.md)
 - `src/debug`: the simulation console (not the demo).
 - `tests`: parity with the prototype, unit tests, scenario claims, the `file://` check.
 - `reference`: the original prototype, used only for parity fixtures.
+
+Milestone 3 (station in 3D) report: [docs/milestones/M3.md](docs/milestones/M3.md).
+
+Useful query parameters for review: `?console` (simulation console), `?theme=control`, `?tier=high|medium|low`, `?backend=webgl|webgpu`, `?aa=traa`.

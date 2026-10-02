@@ -2,7 +2,11 @@
  * Simulation console: a plain page to drive and inspect the engine during development.
  * It is not the demo. It proves the worker, the protocol and the single-file build.
  */
-import './style.css';
+import consoleCss from './style.css?inline';
+
+const style = document.createElement('style');
+style.textContent = consoleCss;
+document.head.appendChild(style);
 import { assumptionTable, CLOCK, SITE } from '../config/assumptions.ts';
 import { clockLabel, compressionLabel } from '../lib/format.ts';
 import type { Command, CommandResult } from '../sim/engine.ts';
