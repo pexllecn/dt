@@ -6,7 +6,7 @@ import { createRegistry } from '../../src/sim/registry.ts';
 import { runEngineeringScenario, SCENARIOS } from '../../src/sim/scenarios.ts';
 
 const US = /\b(colou?r(?<!colour)|center|centers|behavior|optimiz\w*|analyz\w*|organiz\w*|minimiz\w*|maximiz\w*|prioritiz\w*|stabiliz\w*|normaliz\w*|energiz\w*|synchroniz\w*|authoriz\w*|recogniz\w*|realiz\w*|favor\w*|labor|meter(?!ed)|program(?!me)|license(?!d)|defense|catalog(?!ue)|gray|modeling|modeled|traveled|canceled|fueled)\b/i;
-const DASH = /[–—]/;
+const DASH = /[\u2013\u2014]/;
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
 
 function collect(): string[] {
