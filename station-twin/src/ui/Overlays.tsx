@@ -3,8 +3,9 @@ import { useEffect, useState } from 'preact/hooks';
 import { assumptionTable, SITE } from '../config/assumptions.ts';
 import { BRANDING } from '../config/branding.ts';
 import { clockLabel } from '../lib/format.ts';
-import { confirmReq, debugOpen, dockOpen, logOpen, methodOpen, selected, snap, toast } from '../app/store.ts';
+import { confirmReq, debugOpen, dockOpen, lens, logOpen, methodOpen, selected, snap, toast } from '../app/store.ts';
 import type { StageStats } from '../scene/stage.ts';
+import { THERMO_RANGE, VOLTAGE_COLOUR } from '../scene/flow.ts';
 import { Icon } from './icons.tsx';
 
 export function Toast() {
@@ -53,10 +54,29 @@ export function Badge() {
   return <div class="badge panel">{BRANDING.badge}</div>;
 }
 
+const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+
+/** Key to the Flow lens: what moves, what the colours mean, and the thermography scale. */
+export function FlowLegend() {
+  if (lens.value !== 'flow') return null;
+  return (
+    <div class="legend panel" role="note" aria-label="Flow lens legend">
+      <div class="lg-title">Flow lens</div>
+      <div class="lg-row">Particles move with the power flow. Speed is proportional to MW; glow shows loading.</div>
+      <div class="lg-volts">
+        {([400, 275, 220, 110] as const).map((v) => <span key={v}><i style={{ background: hex(VOLTAGE_COLOUR[v]) }} />{v} kV</span>)}
+        <span><i class="dead" />de-energised</span>
+      </div>
+      <div class="lg-row">Transformer thermography (oil and winding)</div>
+      <div class="lg-ramp"><b /><span class="num">{THERMO_RANGE[0]} °C</span><span class="num">{THERMO_RANGE[1]} °C</span></div>
+    </div>
+  );
+}
+
 export function Keys() {
   return (
     <div class="keys panel" aria-hidden="true">
-      <kbd>Space</kbd>pause<kbd>S</kbd>scenarios<kbd>T</kbd>theme<kbd>H</kbd>overview<kbd>M</kbd>method<kbd>D</kbd>debug<kbd>Esc</kbd>clear
+      <kbd>Space</kbd>pause<kbd>1</kbd><kbd>2</kbd>lens<kbd>S</kbd>scenarios<kbd>T</kbd>theme<kbd>H</kbd>overview<kbd>M</kbd>method<kbd>D</kbd>debug<kbd>Esc</kbd>clear
     </div>
   );
 }

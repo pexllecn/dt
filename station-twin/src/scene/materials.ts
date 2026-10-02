@@ -5,7 +5,7 @@
 import * as THREE from 'three/webgpu';
 import {
   abs, bumpMap, clamp, color, float, floor, fract, max, mix, mx_cell_noise_float, mx_fractal_noise_float,
-  mx_noise_float, positionWorld, smoothstep, step, uniform, vec2, vec3,
+  mx_noise_float, normalLocal, positionLocal, positionWorld, smoothstep, step, uniform, vec2, vec3,
 } from 'three/tsl';
 
 export interface Materials {
@@ -28,14 +28,20 @@ export interface Materials {
   lamp: THREE.MeshStandardNodeMaterial;
   fanBlade: THREE.MeshStandardNodeMaterial;
   hedge: THREE.MeshStandardNodeMaterial;
+  water: THREE.MeshStandardNodeMaterial;
   /** 0 by day, 1 at night: drives lit windows and lamps. */
   night: THREE.UniformNode<'float', number>;
+  /** Extra conductor radius with viewing distance (m). */
+  widen: THREE.UniformNode<'float', number>;
 }
 
 const n3 = (scale: number, octaves = 3) => mx_fractal_noise_float(positionWorld.mul(scale), octaves, 2.0, 0.5);
 
 export function createMaterials(): Materials {
   const night = uniform(0) as unknown as THREE.UniformNode<'float', number>;
+  // Peat-dark lough water: mostly reflection of the sky, with a slow ripple in the normals.
+  const water = new THREE.MeshStandardNodeMaterial({ roughness: 0.08, metalness: 0.0 });
+  water.colorNode = mix(color(0x16232a), color(0x24353b), mx_fractal_noise_float(positionWorld.mul(0.012), 2, 2.0, 0.5).mul(0.5).add(0.5));
 
   const galvanised = new THREE.MeshStandardNodeMaterial({ metalness: 0.85 });
   {
@@ -50,6 +56,9 @@ export function createMaterials(): Materials {
   aluminium.roughnessNode = float(0.32).add(n3(4.0).mul(0.06));
 
   const conductor = new THREE.MeshStandardNodeMaterial({ metalness: 1.0, roughness: 0.45, color: 0xb8bbbc });
+  // Overhead lines stay about a pixel wide out to network scale (set from the viewing distance).
+  const widen = uniform(0) as unknown as THREE.UniformNode<'float', number>;
+  conductor.positionNode = positionLocal.add(normalLocal.mul(widen));
 
   // Glazed porcelain: deep brown with a clear glaze.
   const porcelain = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, roughness: 0.28, clearcoat: 1.0, clearcoatRoughness: 0.08 });
@@ -99,11 +108,16 @@ export function createMaterials(): Materials {
     const p = positionWorld.xz;
     const fieldSize = float(140.0);
     const cell = floor(vec2(p.x, p.y).div(fieldSize));
-    const tone = mx_cell_noise_float(vec3(cell.x, cell.y, 3.0));
+    // Neighbouring cells often share a tone, so fields read as irregular holdings, not a chequerboard.
+    const big = floor(cell.div(vec2(2.0, 3.0)));
+    const tone = mix(mx_cell_noise_float(vec3(cell.x, cell.y, 3.0)), mx_cell_noise_float(vec3(big.x, big.y, 7.0)), 0.65);
+    const regional = mx_fractal_noise_float(vec3(p.x, p.y, 0).mul(0.0011), 2, 2.0, 0.5);
+    const tilled = step(float(0.93), mx_cell_noise_float(vec3(cell.x, cell.y, 11.0)));
     const f = fract(vec2(p.x, p.y).div(fieldSize));
     const edge = max(abs(f.x.sub(0.5)), abs(f.y.sub(0.5)));
     const hedgeLine = smoothstep(float(0.485), float(0.497), edge);
-    const base = mix(color(0x4f6b2f), color(0x7a8c3e), tone);
+    const pasture = mix(color(0x55703a), color(0x748a40), tone).mul(regional.mul(0.18).add(1.0));
+    const base = mix(pasture, color(0x7b6c4c), tilled.mul(0.85));
     const texture = mx_fractal_noise_float(vec3(p.x, p.y, 0).mul(0.6), 3, 2.0, 0.5);
     grass.colorNode = mix(mix(base, base.mul(0.8), texture.mul(0.5).add(0.5)), color(0x2c3a1c), hedgeLine.mul(0.85));
     grass.roughnessNode = float(0.95);
@@ -135,6 +149,6 @@ export function createMaterials(): Materials {
 
   return {
     galvanised, aluminium, conductor, porcelain, composite, tankPaint, cabinet, concrete, gravel, asphalt, grass,
-    cladding, roof, glass, rubber, copper, lamp, fanBlade, hedge, night,
+    cladding, roof, glass, rubber, copper, lamp, fanBlade, hedge, water, night, widen,
   };
 }

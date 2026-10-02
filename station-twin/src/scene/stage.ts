@@ -17,7 +17,9 @@ import { YARD_CENTRE } from './layout.ts';
 import { createMaterials, type Materials } from './materials.ts';
 import { createSky, type SkyRig, type Theme } from './sky.ts';
 import { buildStation, type StationScene } from './station.ts';
-import { buildYard } from './yard.ts';
+import { buildSurroundings, type Surroundings } from './surroundings.ts';
+import { FlowLayer } from './flow.ts';
+import { buildYard, terrainHeight } from './yard.ts';
 
 CameraControls.install({
   THREE: {
@@ -27,6 +29,13 @@ CameraControls.install({
 });
 
 export type Tier = 'high' | 'medium' | 'low';
+export type Lens = 'physical' | 'flow' | 'circuit';
+
+/** The flow path whose direction a component's label arrow follows. */
+const ARROW_KEY: Partial<Record<ComponentId, string>> = {
+  GRID: 'L400-1', WIND: 'WIND', TIE_N: 'TIE_N', TIE_S: 'TIE_S', TIE_NI: 'T4-275', SOLAR: 'SOLAR', GAS: 'GAS', BESS: 'BESS',
+  LD_NEW: 'LD_NEW', LD_IND: 'LD_IND', LD_TOWN: 'REG-A', BS220: 'BS220', T1: 'T1-HV', T2: 'T2-HV', T3: 'T3-220', T4: 'T4-220',
+};
 
 export interface StageOptions {
   canvas: HTMLCanvasElement;
@@ -60,6 +69,13 @@ export class Stage {
   controls!: CameraControls;
   materials!: Materials;
   station!: StationScene;
+  surroundings!: Surroundings;
+  flow!: FlowLayer;
+  lens: Lens = 'physical';
+  private flowDim = uniform(0);
+  private arrowRuns = new Map<string, { pts: THREE.Vector3[] }>();
+  private pickables: THREE.Object3D[] = [];
+  private bounds = new Map<ComponentId, THREE.Box3>();
   sky!: SkyRig;
   backend = 'unknown';
   tier: Tier;
@@ -114,7 +130,15 @@ export class Stage {
     this.scene.add(yard.group);
     this.station = buildStation(this.materials);
     this.scene.add(this.station.group);
-    this.scene.fog = new THREE.FogExp2(0xc9d3dc, 0.00011);
+    this.surroundings = buildSurroundings(this.materials, this.station.lineStarts, this.station.cableEnds);
+    this.scene.add(this.surroundings.group);
+    this.pickables = [...this.station.pickables, ...this.surroundings.pickables];
+    // Plant outside the fence is framed by its site; everything else by its bay.
+    this.bounds = new Map(this.station.bounds);
+    for (const [id, b] of this.surroundings.bounds) this.bounds.set(id, b);
+    this.flow = new FlowLayer([...this.station.paths, ...this.surroundings.paths]);
+    this.scene.add(this.flow.group);
+    this.scene.fog = new THREE.FogExp2(0xc9d3dc, 0.00007);
 
     // A copy of the sky for baking the environment map.
     this.envSky = this.sky.sky.clone();
@@ -126,7 +150,7 @@ export class Stage {
     this.controls.smoothTime = 0.45;
     this.controls.draggingSmoothTime = 0.12;
     this.controls.minDistance = 4;
-    this.controls.maxDistance = 2600;
+    this.controls.maxDistance = 9000;
     this.controls.maxPolarAngle = Math.PI * 0.48;
     this.controls.dollyToCursor = true;
     this.controls.setLookAt(170, 150, 330, focus.x, 4, focus.z, false);
@@ -161,7 +185,9 @@ export class Stage {
     const occlusion = aoPass.getTextureNode().sample(screenUV).r;
     const lit = colour.rgb.mul(mix(float(1), occlusion, this.aoStrength));
     const glow = bloom(scenePass.getTextureNode('emissive'), 0.9, 0.35, 0.05);
-    let rgb = lit.add(glow.rgb);
+    // Flow lens: the scene dims so the glowing conductors and particles carry the picture.
+    const emis = scenePass.getTextureNode('emissive').rgb;
+    let rgb = mix(lit, lit.mul(0.36).add(emis.mul(0.64)), this.flowDim).add(glow.rgb);
     // Control Room grade: lower exposure, cooler, less saturated. Never changes simulated time.
     const graded = saturation(rgb.mul(vec3(0.42, 0.47, 0.6)), float(0.55));
     rgb = mix(rgb, graded, this.grade);
@@ -179,10 +205,60 @@ export class Stage {
     this.themeApplied = true;
     this.theme = theme;
     this.grade.value = theme === 'control' ? 1 : 0;
+    if (this.flow && this.lens === 'flow') this.applyLens();
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.set(theme === 'control' ? 0x1a2230 : 0xc9d3dc);
-    fog.density = theme === 'control' ? 0.00016 : 0.00011;
+    fog.density = theme === 'control' ? 0.00011 : 0.00007;
     this.needsEnv = true;
+  }
+
+  setLens(lens: Lens): void {
+    if (lens === 'circuit') lens = 'physical';
+    if (lens === this.lens) return;
+    this.lens = lens;
+    this.applyLens();
+  }
+
+  private applyLens(): void {
+    const on = this.lens === 'flow';
+    this.flow.setActive(false, [], false);
+    if (on) this.flow.setActive(true, [this.station.group, this.surroundings.group], this.theme === 'control');
+    this.flowDim.value = on ? 1 : 0;
+  }
+
+  /** Screen-space angle (radians, 0 = right, clockwise) of the flow at a component's label, or null when nothing flows. */
+  flowArrow(id: ComponentId, at: { x: number; y: number }): number | null {
+    const key = ARROW_KEY[id];
+    if (!key) return null;
+    const v = this.flow.velocityOf(key);
+    if (!v) return null;
+    const far = this.isNetworkScale();
+    const cacheKey = `${id}:${far ? 1 : 0}`;
+    let run = this.arrowRuns.get(cacheKey);
+    if (!run) {
+      const anchor = (far ? this.surroundings.farAnchors.get(id) : null) ?? this.station.anchors.get(id);
+      if (!anchor) return null;
+      let best: { pts: THREE.Vector3[] } | null = null;
+      let bestD = Infinity;
+      for (const r of this.flow.runs) {
+        if (r.key.key !== key) continue;
+        // The longest path near the anchor reads best: prefer spans over droppers.
+        const mid = r.path.pts[Math.floor(r.path.pts.length / 2)]!;
+        const d = mid.distanceTo(anchor) - Math.min(60, r.path.length) * 0.5;
+        if (d < bestD) { bestD = d; best = { pts: r.path.pts }; }
+      }
+      if (!best) return null;
+      run = best;
+      this.arrowRuns.set(cacheKey, run);
+    }
+    const a = run.pts[0]!;
+    const b = run.pts[run.pts.length - 1]!;
+    const pa = this.projectPoint(a);
+    const pb = this.projectPoint(b);
+    void at;
+    let ang = Math.atan2(pb.y - pa.y, pb.x - pa.x);
+    if (v < 0) ang += Math.PI;
+    return ang;
   }
 
   setState(state: SimState): void {
@@ -230,7 +306,7 @@ export class Stage {
     const rect = this.opts.canvas.getBoundingClientRect();
     const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
-    const hits = this.raycaster.intersectObjects(this.station.pickables, false);
+    const hits = this.raycaster.intersectObjects(this.pickables, false);
     for (const h of hits) {
       const owner = h.object.userData.owner as ComponentId | undefined;
       if (owner) return owner;
@@ -242,13 +318,13 @@ export class Stage {
     this.selected = id;
     const ring = this.selectionRing!;
     if (!id) { ring.visible = false; return; }
-    const box = this.station.bounds.get(id);
+    const box = this.bounds.get(id);
     if (!box) { ring.visible = false; return; }
-    const anchor = this.station.anchors.get(id);
+    const anchor = this.surroundings.bounds.has(id) ? null : this.station.anchors.get(id);
     const c = anchor ? anchor.clone() : box.getCenter(new THREE.Vector3());
     const s = box.getSize(new THREE.Vector3());
     const isTx = id === 'T1' || id === 'T2' || id === 'T3' || id === 'T4';
-    const r = isTx ? 11 : THREE.MathUtils.clamp(Math.min(s.x, s.z) * 0.6, 5, 22);
+    const r = isTx ? 11 : this.surroundings.bounds.has(id) ? Math.max(s.x, s.z) * 0.62 : THREE.MathUtils.clamp(Math.min(s.x, s.z) * 0.6, 5, 22);
     ring.scale.set(r, 1, r);
     ring.position.set(c.x, 0.15, c.z);
     ring.visible = true;
@@ -256,14 +332,14 @@ export class Stage {
 
   /** Fly to a framed view of a component. */
   flyTo(id: ComponentId, close = false): void {
-    const box = this.station.bounds.get(id);
+    const box = this.bounds.get(id);
     if (!box) return;
     const c = box.getCenter(new THREE.Vector3());
     const s = box.getSize(new THREE.Vector3());
     const r = Math.max(8, Math.max(s.x, s.z) * (close ? 0.45 : 0.85));
     const az = Math.atan2(this.camera.position.x - c.x, this.camera.position.z - c.z);
     const dist = r * 1.9;
-    const y = Math.max(6, c.y + r * 0.7);
+    const y = Math.max(6, c.y + r * 0.7, terrainHeight(c.x + Math.sin(az) * dist, c.z + Math.cos(az) * dist) + 20);
     void this.controls.setLookAt(c.x + Math.sin(az) * dist, y, c.z + Math.cos(az) * dist, c.x, Math.max(2, c.y * 0.8), c.z, true);
   }
 
@@ -282,14 +358,28 @@ export class Stage {
     const out: ProjectedLabel[] = [];
     const rect = this.opts.canvas.getBoundingClientRect();
     const v = new THREE.Vector3();
+    const far = this.isNetworkScale();
     for (const id of ids) {
-      const a = this.station.anchors.get(id);
+      const a = (far ? this.surroundings.farAnchors.get(id) : null) ?? this.station.anchors.get(id);
       if (!a) continue;
       v.copy(a).project(this.camera);
       const distance = this.camera.position.distanceTo(a);
       out.push({ id, x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height, visible: v.z > -1 && v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1, distance });
     }
     return out;
+  }
+
+  /** True when the camera is out at network scale, so labels move to the plant they name. */
+  isNetworkScale(): boolean {
+    const [x, , z] = YARD_CENTRE;
+    return Math.hypot(this.camera.position.x - x, this.camera.position.y, this.camera.position.z - z) > 1100;
+  }
+
+  /** Project arbitrary world points (static labels). */
+  projectPoint(p: THREE.Vector3): { x: number; y: number; visible: boolean; distance: number } {
+    const rect = this.opts.canvas.getBoundingClientRect();
+    const v = p.clone().project(this.camera);
+    return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height, visible: v.z > -1 && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05, distance: this.camera.position.distanceTo(p) };
   }
 
   getStats(): StageStats {
@@ -301,7 +391,7 @@ export class Stage {
     const sun = this.sky.sun;
     const target = this.controls.getTarget(new THREE.Vector3());
     const dist = this.camera.position.distanceTo(target);
-    const half = THREE.MathUtils.clamp(dist * 0.7, 28, 300);
+    const half = THREE.MathUtils.clamp(dist * 0.7, 28, 1600);
     const texel = (half * 2) / sun.shadow.mapSize.x;
     target.x = Math.round(target.x / texel) * texel;
     target.z = Math.round(target.z / texel) * texel;
@@ -339,6 +429,14 @@ export class Stage {
       const changed = this.sky.update(this.state.t, this.state.weather, this.theme);
       if (changed) this.needsEnv = true;
       this.station.update(this.state, dt, this.time);
+      this.surroundings.update(this.state, dt, this.time);
+      const viewDist = this.camera.position.distanceTo(this.controls.getTarget(new THREE.Vector3()));
+      this.flow.setViewDistance(viewDist);
+      this.materials.widen.value = Math.max(0, viewDist * 0.00045 - 0.15);
+      // Keep depth precision where the camera is looking: the near plane follows the viewing distance.
+      const near = THREE.MathUtils.clamp(viewDist * 0.002, 0.8, 12);
+      if (Math.abs(near - this.camera.near) > 0.05) { this.camera.near = near; this.camera.updateProjectionMatrix(); }
+      this.flow.update(this.state, dt);
     }
     if (this.needsEnv) { this.bakeEnvironment(); this.needsEnv = false; }
     if (this.selectionRing?.visible) {

@@ -4,6 +4,7 @@ import { at, block, box, latticeColumn, merge, post, rod, type Geo } from './geo
 import { CONTROL_BUILDING, FENCE } from './layout.ts';
 import type { Materials } from './materials.ts';
 import type { MatKey } from './equipment.ts';
+import { LOUGHS } from './siteplan.ts';
 
 /** Deterministic value noise for terrain (CPU side). */
 function hash2(x: number, z: number): number {
@@ -17,8 +18,7 @@ function vnoise(x: number, z: number): number {
   const a = hash2(xi, zi), b = hash2(xi + 1, zi), c = hash2(xi, zi + 1), d = hash2(xi + 1, zi + 1);
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
-/** Terrain height: flat at the station, drumlin-like rolling ground beyond. */
-export function terrainHeight(x: number, z: number): number {
+function baseHeight(x: number, z: number): number {
   const r = Math.hypot(x + 55, z);
   const ramp = Math.min(1, Math.max(0, (r - 420) / 900));
   // Drumlins: elongated hills aligned north-west to south-east.
@@ -28,7 +28,39 @@ export function terrainHeight(x: number, z: number): number {
   let amp = 1;
   let f = 1;
   for (let o = 0; o < 4; o++) { h += vnoise(ax * f, az * f) * amp; amp *= 0.5; f *= 2.1; }
-  return ramp * (h - 0.6) * 55 + ramp * ramp * 20;
+  const hills = ramp * (h - 0.6) * 55 + ramp * ramp * 20;
+  // Far out the ground eases to a level plain so the edge of the world sits under the haze.
+  const edge = Math.min(1, Math.max(0, (r - 6000) / 1200));
+  return hills * (1 - edge) + 22 * edge;
+}
+
+const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+/** Loughs with their water level, sitting in basins carved into the drumlins. */
+export const LOUGH_LEVELS = LOUGHS.map((l) => ({ ...l, level: baseHeight(l.x, l.z) - 2.5 }));
+
+function loughDistance(l: (typeof LOUGHS)[number], x: number, z: number): number {
+  const c = Math.cos(l.rot), s = Math.sin(l.rot);
+  const dx = x - l.x, dz = z - l.z;
+  const u = (dx * c - dz * s) / l.rx;
+  const v = (dx * s + dz * c) / l.rz;
+  return Math.hypot(u, v);
+}
+
+/** Terrain height: flat at the station, drumlin-like rolling ground beyond, loughs in the hollows. */
+export function terrainHeight(x: number, z: number): number {
+  let h = baseHeight(x, z);
+  for (const l of LOUGH_LEVELS) {
+    const d = loughDistance(l, x, z);
+    // The basin lies under the whole water disc, so the shoreline is the disc's own smooth edge.
+    if (d < 1.12) h = l.level - 6 - 4 * (1 - Math.min(1, d));
+    else if (d < 1.8) h = h + (l.level - 6 - h) * (1 - smooth(1.12, 1.8, d));
+  }
+  return h;
+}
+
+export function inLough(x: number, z: number, pad = 1): boolean {
+  return LOUGH_LEVELS.some((l) => loughDistance(l, x, z) < pad);
 }
 
 export interface Yard {
@@ -45,8 +77,8 @@ export function buildYard(m: Materials): Yard {
   const [x0, z0, x1, z1] = FENCE;
 
   // Terrain.
-  const size = 9000;
-  const seg = 220;
+  const size = 16000;
+  const seg = 400;
   const ground = new THREE.PlaneGeometry(size, size, seg, seg);
   ground.rotateX(-Math.PI / 2);
   const pos = ground.attributes.position!;
@@ -55,6 +87,24 @@ export function buildYard(m: Materials): Yard {
   const terrain = new THREE.Mesh(ground, m.grass);
   terrain.receiveShadow = true;
   group.add(terrain);
+  // Beyond the terrain, a level plain out to the haze.
+  const plain = new THREE.RingGeometry(size * 0.48, 40000, 64, 1);
+  plain.rotateX(-Math.PI / 2);
+  plain.translate(0, 21.4, 0);
+  const plainMesh = new THREE.Mesh(plain, m.grass);
+  plainMesh.receiveShadow = false;
+  group.add(plainMesh);
+  // Loughs.
+  for (const l of LOUGH_LEVELS) {
+    const g = new THREE.CircleGeometry(1, 64);
+    g.rotateX(-Math.PI / 2);
+    g.scale(l.rx * 1.12, 1, l.rz * 1.12);
+    g.rotateY(l.rot);
+    g.translate(l.x, l.level, l.z);
+    const w = new THREE.Mesh(g, m.water);
+    w.receiveShadow = true;
+    group.add(w);
+  }
 
   // Gravel yard inside the fence, on a slight plinth.
   add('gravel', block(x1 - x0, 0.12, z1 - z0, (x0 + x1) / 2, (z0 + z1) / 2, -0.06));

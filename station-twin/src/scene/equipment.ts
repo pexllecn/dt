@@ -9,7 +9,7 @@ import { at, block, box, cyl, insulator, merge, post, rod, supportColumn, type G
 import { VOLTAGE, type Voltage } from './layout.ts';
 import type { Materials } from './materials.ts';
 
-export type MatKey = Exclude<keyof Materials, 'night'>;
+export type MatKey = Exclude<keyof Materials, 'night' | 'widen'>;
 
 export interface Part {
   mat: MatKey;

@@ -1,7 +1,8 @@
 /**
  * The 3D station application: a full-bleed stage with UI floating over it.
  * Query parameters (for capture and review): capture, backend=webgl|webgpu, tier=high|medium|low,
- * theme=control, time=HH:MM, scenario=a,b, select=ID, view=tx,ty,tz,fx,fy,fz, frames=N.
+ * ops=operate:ID:device:action|gen:ID:MW|demand:ID:MW|battery:MW|advance:S (comma separated),
+ * theme=control, lens=flow, time=HH:MM, scenario=a,b, select=ID, view=tx,ty,tz,fx,fy,fz, frames=N.
  */
 import '../ui/theme.css';
 import { effect } from '@preact/signals';
@@ -12,10 +13,10 @@ import { Stage, type Tier } from '../scene/stage.ts';
 import { attachLabels } from '../ui/labels.ts';
 import { Dock } from '../ui/Dock.tsx';
 import { Inspector } from '../ui/Inspector.tsx';
-import { Badge, Confirm, Debug, DockToggle, Keys, Log, Method, Toast } from '../ui/Overlays.tsx';
+import { Badge, Confirm, Debug, DockToggle, FlowLegend, Keys, Log, Method, Toast } from '../ui/Overlays.tsx';
 import { TopStrip } from '../ui/TopStrip.tsx';
 import { localClient, workerClient, type SimClient } from './client.ts';
-import { clock, confirmReq, debugOpen, dockOpen, methodOpen, selected, snap, theme, toast } from './store.ts';
+import { clock, confirmReq, debugOpen, dockOpen, lens, methodOpen, selected, snap, theme, toast } from './store.ts';
 
 const params = new URLSearchParams(location.search);
 const capture = params.has('capture');
@@ -31,6 +32,7 @@ function App({ client, stage }: { client: SimClient; stage: Stage }) {
       <Toast />
       <Log />
       <Badge />
+      <FlowLegend />
       {!capture && <Keys />}
       <Debug stats={() => stage.getStats()} />
       <Method />
@@ -66,6 +68,10 @@ async function boot(): Promise<void> {
     for (const op of (params.get('ops') ?? '').split(',').filter(Boolean)) {
       const [kind, id, device, action] = op.split(':');
       if (kind === 'operate') engine.command({ type: 'operate', id: id as ComponentId, device: device as never, action: action as 'open' | 'close' });
+      if (kind === 'gen') engine.command({ type: 'setGeneration', id: id as 'GAS', out: Number(device) });
+      if (kind === 'demand') engine.command({ type: 'setDemand', id: id as 'LD_TOWN', mw: Number(device) });
+      if (kind === 'battery') engine.command({ type: 'setBattery', mw: Number(id) });
+      if (kind === 'advance') engine.advance(Number(id));
     }
     client = localClient(engine);
     clock.value = { ...clock.value, paused: true };
@@ -97,6 +103,7 @@ async function boot(): Promise<void> {
   effect(() => { const s = snap.value; if (s) stage.setState(s); });
   effect(() => { document.documentElement.dataset.theme = theme.value; stage.setTheme(theme.value); leader.style.color = theme.value === 'control' ? '#e8ecf1' : '#14181d'; });
   effect(() => stage.select(selected.value));
+  effect(() => { stage.setLens(lens.value); document.documentElement.dataset.lens = lens.value; });
   stage.onPick = (id) => {
     selected.value = id;
     if (id) stage.flyTo(id);
@@ -125,6 +132,8 @@ async function boot(): Promise<void> {
     if (confirmReq.value) { if (e.key === 'Escape') confirmReq.value = null; return; }
     switch (e.key) {
       case ' ': e.preventDefault(); client.setClock({ paused: !clock.value.paused }); break;
+      case '1': lens.value = 'physical'; break;
+      case '2': lens.value = 'flow'; break;
       case 's': case 'S': dockOpen.value = !dockOpen.value; break;
       case 't': case 'T': theme.value = theme.value === 'daylight' ? 'control' : 'daylight'; break;
       case 'd': case 'D': debugOpen.value = !debugOpen.value; break;
@@ -137,6 +146,7 @@ async function boot(): Promise<void> {
   });
 
   if (params.get('theme') === 'control') theme.value = 'control';
+  if (params.get('lens') === 'flow') lens.value = 'flow';
   const sel = params.get('select') as ComponentId | null;
   if (sel) selected.value = sel;
   if (params.has('dock') && params.get('dock') === '0') dockOpen.value = false;
@@ -150,8 +160,11 @@ async function boot(): Promise<void> {
   loading.classList.add('done');
   setTimeout(() => loading.remove(), 500);
   if (capture) {
+    // Let the UI settle (panels open or closed) before the frames that place labels.
+    await new Promise((r) => setTimeout(r, 60));
     await stage.renderFrames(Number(params.get('frames') ?? 16), Number(params.get('dt') ?? 1 / 30));
-    (window as unknown as { __stats: unknown }).__stats = stage.getStats();
+    (window as unknown as { __stats: unknown; __stage: unknown }).__stats = stage.getStats();
+    (window as unknown as { __stage: unknown }).__stage = stage;
     document.body.dataset.ready = '1';
     return;
   }

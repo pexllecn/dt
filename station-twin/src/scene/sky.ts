@@ -35,7 +35,7 @@ export function createSky(scene: THREE.Scene, materials: Materials, focus: THREE
   sun.castShadow = true;
   sun.shadow.mapSize.set(4096, 4096);
   const sc = sun.shadow.camera;
-  sc.left = -260; sc.right = 260; sc.top = 260; sc.bottom = -260; sc.near = 10; sc.far = 1400;
+  sc.left = -260; sc.right = 260; sc.top = 260; sc.bottom = -260; sc.near = 10; sc.far = 2200;
   sun.shadow.bias = -0.00025;
   sun.shadow.normalBias = 0.12;
   sun.target.position.copy(focus);
@@ -74,7 +74,7 @@ export function createSky(scene: THREE.Scene, materials: Materials, focus: THREE
       sky.cloudDensity.value = 0.35 + overcast * 0.55;
       sky.turbidity.value = 4 + overcast * 8 + (weather.storm ? 6 : 0);
       sky.rayleigh.value = weather.storm ? 0.6 : 1.3 + low * 0.8;
-      sun.position.copy(dir).multiplyScalar(700).add(sun.target.position);
+      sun.position.copy(dir).multiplyScalar(1000).add(sun.target.position);
       const directStrength = Math.max(0, Math.sin(el)) > 0 ? 1 : 0;
       sun.intensity = directStrength * day * (9.0 - overcast * 4.5) * (weather.storm ? 0.3 : 1);
       sun.color.setHSL(0.09, 0.55 * low + 0.1, 0.9 - low * 0.12);
