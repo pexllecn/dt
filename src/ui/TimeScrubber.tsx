@@ -29,7 +29,7 @@ export function TimeScrubber() {
     timeZone: 'UTC',
   });
   return (
-    <div className="absolute bottom-9 left-8 right-8 select-none">
+    <div className="halo absolute bottom-9 left-8 right-8 select-none">
       <div className="mb-1.5 flex items-baseline justify-between text-[10px] tracking-[0.12em] text-ink-soft">
         <span className="caption text-[13px] tracking-normal text-ink">{label}</span>
         <span className="figure text-[12px] text-ink">{fmt(hours)}</span>

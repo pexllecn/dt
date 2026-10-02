@@ -6,6 +6,7 @@ import { WorldRuntime } from '@/scene/WorldRuntime';
 import { ExploreControls, type ControlsHandle } from './ExploreControls';
 import { installWebGPUCompat } from '@/render/compat';
 import { BenchDriver } from './BenchDriver';
+import { startSimulation } from '@/sim/client';
 
 const benchMode = new URLSearchParams(location.search).has('bench');
 
@@ -21,6 +22,7 @@ function World({ controls }: { controls: React.RefObject<ControlsHandle | null> 
   const fpsAcc = useRef({ t: 0, n: 0 });
 
   useEffect(() => {
+    startSimulation();
     let disposed = false;
     WorldRuntime.create(gl as unknown as THREE.WebGPURenderer, scene as unknown as THREE.Scene, camera as THREE.PerspectiveCamera, (m) =>
       setReady(false, m),

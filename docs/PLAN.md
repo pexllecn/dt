@@ -12,7 +12,8 @@ Approved 2 October 2026. Decisions recorded in §0.
 | Timing | EirGrid session in November 2026. Cut line set accordingly (§12). |
 | Immersive | Igloo room with **four walls and a floor** (CAVE-style). The rig renders five 90° views from one eye point (front, left, right, back, floor) and outputs either a face layout or an equirectangular frame, whichever the room's software ingests. Exact input format and per-face resolution still to be confirmed. |
 | Narration | Optional layer uses the Anthropic API through one Vercel function, off by default |
-| Hero connection point | Nearest existing 110 kV station in north Mayo, chosen from the data and labelled "connection point assumed" |
+| Hero connection point | Nearest existing 110 kV station in north Mayo, chosen from the data and labelled "connection point assumed" (Bellacorick 110 kV) |
+| Network reduction (M3) | The simulation keeps the full ≥ 110 kV topology (382 buses): DC flow is cheap at this size, so only exact clean-up steps are applied. Agents and the UI focus on key stations. |
 
 ---
 

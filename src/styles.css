@@ -81,3 +81,8 @@ body,
   50% { opacity: 1; transform: scale(1); }
 }
 .breathe { animation: breathe 2.4s ease-in-out infinite; }
+
+/* Legibility over the scene without a panel: a soft halo in the ground colour. */
+.halo {
+  text-shadow: 0 0 10px var(--ground), 0 0 3px var(--ground), 0 0 1px var(--ground);
+}

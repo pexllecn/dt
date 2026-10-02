@@ -22,6 +22,10 @@ import { Ocean } from './ocean/Ocean';
 import { createBackgroundNode, createHazeNode } from './sky/skyNodes';
 import { computeLighting, type LightingState } from './world/lighting';
 import { world } from './world/uniforms';
+import { NetworkLayer } from './network/NetworkLayer';
+import { sampleBranch, useSim } from '@/sim/client';
+import type { ModelMeta } from '@/sim/protocol';
+import type { NetworkData } from '@/sim/types';
 
 const debugFlags = new URLSearchParams(location.search);
 
@@ -99,6 +103,48 @@ export class WorldRuntime {
   /** Point the camera orbits around (for shadow framing and the sun's local latitude). */
   setFocus(target: Vector3) {
     this.target.copy(target);
+  }
+
+  network: NetworkLayer | null = null;
+  private networkLoading = false;
+  private flowBuf = new Float32Array(0);
+  private loadBuf = new Float32Array(0);
+  private n1Buf = new Float32Array(0);
+
+  private async loadNetwork(meta: ModelMeta) {
+    this.networkLoading = true;
+    const base = `${import.meta.env.BASE_URL}data/network`;
+    const [net, lines] = await Promise.all([
+      fetch(`${base}/network.json`).then((r) => r.json() as Promise<NetworkData>),
+      fetch(`${base}/lines.json`).then((r) => r.json() as Promise<Record<string, number[][]>>),
+    ]);
+    this.network = new NetworkLayer(net, lines, meta, (x, z) => this.terrain.heightAt(x, z));
+    this.scene.add(this.network.group);
+    (window as unknown as { __twinNetwork?: boolean }).__twinNetwork = true;
+    const nb = meta.branches.length;
+    this.flowBuf = new Float32Array(nb);
+    this.loadBuf = new Float32Array(nb);
+    this.n1Buf = new Float32Array(nb);
+  }
+
+  private updateNetwork(hours: number, dt: number) {
+    const sim = useSim.getState();
+    if (!this.network) {
+      if (sim.meta && !this.networkLoading) void this.loadNetwork(sim.meta);
+      return;
+    }
+    const day = sim.day;
+    const meta = sim.meta;
+    if (!day || !meta) return;
+    const nb = meta.branches.length;
+    sampleBranch(day.flows, nb, hours, this.flowBuf);
+    sampleBranch(day.loading, nb, hours, this.loadBuf);
+    sampleBranch(day.n1Loading, nb, hours, this.n1Buf);
+    const tripped = new Set(sim.inputs.outages.map((id) => meta.branches.findIndex((b) => b.id === id)).filter((i) => i >= 0));
+    this.network.update(
+      { flows: this.flowBuf, loading: this.loadBuf, n1: this.n1Buf, tripped, dt, altitude: Math.max(1, this.camera.position.y) },
+      this.camera,
+    );
   }
 
   update(state: Pick<WorldState, 'theme' | 'date' | 'hours'>, dt: number): void {
@@ -180,6 +226,7 @@ export class WorldRuntime {
     }
 
     this.terrain.update(cam);
+    this.updateNetwork(state.hours, dt);
     this.ocean.update(cam);
 
     frameStats.altitude = altitude;

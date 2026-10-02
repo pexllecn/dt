@@ -11,6 +11,7 @@ import { DebugOverlay } from '@/ui/DebugOverlay';
 import { FallbackCard } from '@/ui/FallbackCard';
 import { LoadingVeil } from '@/ui/LoadingVeil';
 import { BenchPanel } from '@/ui/BenchPanel';
+import { StatsRow } from '@/ui/StatsRow';
 
 export function App() {
   const [cap, setCap] = useState<Capability | null>(null);
@@ -39,10 +40,11 @@ export function App() {
       <LoadingVeil />
       <Masthead />
       <StatusPill
-        state={timeRate !== 0 ? { label: 'TIME-LAPSE · RUNNING', tone: 'running' } : { label: 'WORLD PREVIEW · PAUSED', tone: 'paused' }}
+        state={timeRate !== 0 ? { label: 'SIMULATION · RUNNING', tone: 'running' } : { label: 'SIMULATION · PAUSED', tone: 'paused' }}
       />
       <DebugOverlay />
       <BenchPanel />
+      <StatsRow />
       <TimeScrubber />
       <DataBadge />
     </div>
