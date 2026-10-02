@@ -512,6 +512,7 @@ def main():
 
     out_branches = []
     lines_geom = {}
+    support_src = {}
     for i, b in enumerate(sorted(branches, key=lambda b: (-b["kv"], -b["lengthM"]))):
         bid = f"L{i}"
         kind = "hvdc" if b["hvdc"] else ("cable" if b["cableFrac"] > 0.5 else "line")
@@ -519,6 +520,7 @@ def main():
                              "kind": kind, "kv": b["kv"], "lengthKm": round(b["lengthM"] / 1000, 3),
                              "cableFraction": round(b["cableFrac"], 3), "circuits": b["circuits"],
                              "name": b["name"], "osmWays": b["ways"]})
+        support_src[bid] = b
         simp = shapely.LineString(b["coords"]).simplify(15)
         lines_geom[bid] = [[round(x, 1), round(y, 1)] for x, y in simp.coords]
 
@@ -605,6 +607,44 @@ def main():
             kv = max(hv_ways[int(h)]["kv"] for h in hits)
             towers.append((g.x, g.y, kv, 1))
     del hv_line_union
+    # ---- support structures per overhead branch (OSM draws lines vertex-to-tower)
+    tower_tree = STRtree([shapely.Point(t[0], t[1]) for t in towers]) if towers else None
+    span = {400: 380, 275: 350, 220: 330, 110: 240}
+    sup_index = {}
+    sup_rows = []
+    for br in out_branches:
+        b = support_src.get(br["id"])
+        if not b or br["kind"] != "line":
+            continue
+        kept = []
+        for x, y in b["coords"]:
+            if kept and math.hypot(x - kept[-1][0], y - kept[-1][1]) < 35:
+                continue
+            kept.append((x, y))
+        rs = span.get(br["kv"], 300)
+        pts = []
+        for i, (x, y) in enumerate(kept):
+            if i > 0:
+                px, py = kept[i - 1]
+                gap = math.hypot(x - px, y - py)
+                n = int(gap // (rs * 1.6))
+                for k in range(1, n + 1):
+                    t = k / (n + 1)
+                    pts.append((px + (x - px) * t, py + (y - py) * t, 0))  # inferred support
+            kind = 0
+            if tower_tree is not None:
+                hit = tower_tree.query(shapely.Point(x, y), predicate="dwithin", distance=6)
+                kind = 1 if len(hit) else 0
+            pts.append((x, y, kind))
+        # type: 1 = lattice tower (OSM tower or >= 220 kV), 2 = wood poleset (110 kV, not tagged tower)
+        sup_index[br["id"]] = [len(sup_rows), len(pts)]
+        for x, y, k in pts:
+            t = 1 if (k == 1 or br["kv"] >= 220) else 2
+            sup_rows.append((x, y, t))
+    with open(OUTDIR / "supports.bin", "wb") as f:
+        f.write(np.array(sup_rows, dtype=np.float32).tobytes())
+    (OUTDIR / "supports.json").write_text(json.dumps(sup_index, separators=(",", ":")))
+    log("supports:", len(sup_rows), Counter(r[2] for r in sup_rows))
     with open(OUTDIR / "turbines.bin", "wb") as f:
         f.write(np.array(turbines, dtype=np.float32).tobytes())
     with open(OUTDIR / "towers.bin", "wb") as f:

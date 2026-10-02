@@ -78,7 +78,7 @@ const col = (hex: string) => {
 const MAX_SEGMENT = 450; // m: densify so ribbons follow the ground
 
 /** Builds a clip-space position for a screen-space-width segment quad. */
-function segmentClip(
+export function segmentClip(
   pa: N<'vec3'>,
   pb: N<'vec3'>,
   end: N<'float'>,
@@ -255,7 +255,10 @@ export class NetworkLayer {
     const pulse = float(0.75).add(float(0.25).mul(world.time.mul(5).sin())).mul(smoothstep(0.99, 1.01, loading)).add(float(1).sub(smoothstep(0.99, 1.01, loading)));
     const dash = smoothstep(0.45, 0.55, fract(vAlong.div(stripeLen.mul(0.6))));
     const edge = float(1).sub(smoothstep(vWidth.sub(1.5).div(vWidth), 1, abs(vSide)));
+    // At site scale the modelled conductors take over from the overhead ribbon.
+    const siteFade = mix(smoothstep(1800, 5000, world.altitude), float(1), cable);
     const ribbonAlpha = mix(float(0.88), float(0.95), world.themeMix)
+      .mul(siteFade)
       .mul(mix(float(1), float(0.45), ni))
       .mul(mix(float(1), float(0.55), cable))
       .mul(mix(float(1), mix(float(1), float(0.55), stripe), over))

@@ -21,6 +21,9 @@ export function DebugOverlay() {
     ['terrain nodes', String(frameStats.terrainNodes)],
     ['altitude', `${(frameStats.altitude / 1000).toFixed(1)} km`],
     ['exaggeration', `${frameStats.exaggeration.toFixed(2)}x`],
+    ['supports', String(frameStats.supports)],
+    ['conductors', String(frameStats.conductors)],
+    ['turbines', String(frameStats.turbines)],
   ];
   return (
     <div

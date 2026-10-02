@@ -24,7 +24,15 @@ import {
   vec4,
   varyingProperty,
   select,
+  mx_noise_float,
+  positionWorld,
 } from 'three/tsl';
+import { Color } from 'three/webgpu';
+
+const hex = (h: string) => {
+  const c = new Color(h);
+  return vec3(c.r, c.g, c.b);
+};
 import { world } from '../world/uniforms';
 import type { FloatU, N, Vec2U } from '@/lib/tsl';
 
@@ -38,6 +46,8 @@ const TEX_N = 257; // samples per tile side
 export const national = {
   sdf: texture(null as unknown as Texture),
   mask: texture(null as unknown as Texture),
+  /** Land cover classes, 4096 x 4096 (128 m, pixel-area convention). */
+  landcover: texture(null as unknown as Texture),
   /** Scene-space x and z of the domain's north-west corner, and its size. */
   origin: uniform(new Vector2()),
   size: uniform(524_288),
@@ -136,7 +146,31 @@ export function createTerrainMaterial(placeholder: DataTexture): TerrainNodeMate
   const hz1 = heightTex.sample(uvC.add(vec2(0, du))).r;
   const hz0 = heightTex.sample(uvC.sub(vec2(0, du))).r;
   const inv = world.exaggeration.mul(world.shadeBoost).div(texSpacing.mul(2));
-  const nWorld = normalize(vec3(hx0.sub(hx1).mul(inv), 1, hz0.sub(hz1).mul(inv)));
+  const nBase = normalize(vec3(hx0.sub(hx1).mul(inv), 1, hz0.sub(hz1).mul(inv)));
+
+  // Land cover (OSM via Overture), with a noise-jittered lookup so class edges read as organic.
+  const fragXZ0 = modelWorldMatrix.mul(vec4(vUnit.x.mul(size), 0, vUnit.y.mul(size), 1)).xz;
+  const jitter = vec2(mx_noise_float(vec3(fragXZ0.mul(0.011), 1.3)), mx_noise_float(vec3(fragXZ0.mul(0.011), 7.1))).mul(110);
+  const lcUv = fragXZ0.add(jitter).sub(national.origin).div(national.size);
+  const lc = national.landcover.sample(lcUv).r.mul(255);
+  const cls = (c: number) => float(1).sub(smoothstep(0.4, 0.6, abs(lc.sub(c))));
+  const forest = cls(1);
+  const wet = cls(2);
+  const heath = cls(3);
+  const grass = cls(4);
+  const rock = cls(5);
+  const sand = cls(6);
+
+  // Micro-relief near the camera: canopy texture in forest, hummocks on bog, fine grain elsewhere.
+  const camDist = length(positionWorld.sub(cameraPosition));
+  const near = float(1).sub(smoothstep(1200, 9000, camDist));
+  const amp = float(0.12).add(forest.mul(0.55)).add(wet.mul(0.3)).add(heath.mul(0.22)).add(rock.mul(0.4)).mul(near);
+  const nAt = (p: N<'vec2'>) => mx_noise_float(vec3(p.mul(0.09), 0)).add(mx_noise_float(vec3(p.mul(0.33), 3)).mul(0.45));
+  const e = float(1.5);
+  const n0 = nAt(fragXZ0);
+  const dnx = nAt(fragXZ0.add(vec2(e, 0))).sub(n0);
+  const dnz = nAt(fragXZ0.add(vec2(0, e))).sub(n0);
+  const nWorld = normalize(nBase.add(vec3(dnx.negate(), 0, dnz.negate()).mul(amp.mul(0.9))));
   material.normalNode = transformNormalToView(nWorld);
 
   const centre = heightTex.sample(uvC);
@@ -144,7 +178,7 @@ export function createTerrainMaterial(placeholder: DataTexture): TerrainNodeMate
   const h = vHeight;
 
   // Scene xz of this fragment for the national textures.
-  const fragXZ = modelWorldMatrix.mul(vec4(vUnit.x.mul(size), 0, vUnit.y.mul(size), 1)).xz;
+  const fragXZ = fragXZ0;
   const mask = national.mask.sample(nationalUv(fragXZ));
   const context = smoothstep(0.42, 0.5, mask.r); // NI, GB and Isle of Man
   const slope = float(1).sub(nWorld.y);
@@ -152,7 +186,18 @@ export function createTerrainMaterial(placeholder: DataTexture): TerrainNodeMate
   const hyps = smoothstep(20, 650, h);
   const base = mix(world.terrainLow, world.terrainHigh, hyps);
   const sloped = mix(base, base.mul(0.93), smoothstep(0.02, 0.25, slope));
-  const land = mix(sloped, world.terrainContext, context.mul(0.85));
+  // Class tints: subtle paint on the plaster model in Specimen, deeper tones in Control Room.
+  const tintOf = (spec: string, ctrl: string) => mix(hex(spec), hex(ctrl), world.themeMix);
+  const tintStrength = mix(float(0.35), float(0.75), smoothstep(80_000, 15_000, world.altitude));
+  let tinted = sloped;
+  tinted = mix(tinted, tintOf('#c8cbb8', '#2f3832'), forest.mul(tintStrength));
+  tinted = mix(tinted, tintOf('#d8cab0', '#3d372d'), wet.mul(tintStrength));
+  tinted = mix(tinted, tintOf('#d5c9bd', '#3b3536'), heath.mul(tintStrength));
+  tinted = mix(tinted, tintOf('#dcdcc8', '#3d453c'), grass.mul(tintStrength.mul(0.7)));
+  tinted = mix(tinted, tintOf('#d4d3d0', '#5a5c5f'), rock.mul(tintStrength));
+  tinted = mix(tinted, tintOf('#eee3c6', '#5e5747'), sand.mul(tintStrength));
+  const speckle = mx_noise_float(vec3(fragXZ0.mul(0.06), 2)).mul(0.04).mul(near);
+  const land = mix(tinted.mul(float(1).add(speckle)), world.terrainContext, context.mul(0.85));
   material.colorNode = vec4(mix(land, world.lake, lake), 1);
   material.roughnessNode = mix(world.roughness, float(0.3), lake);
   material.metalnessNode = float(0);

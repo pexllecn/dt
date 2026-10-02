@@ -104,7 +104,17 @@ export interface ConductorClass {
   maxDesignTempC: Sourced;
   rulingSpanM: Sourced;
   sagAtDesignM: Sourced;
+  massKgPerM: Sourced;
 }
+
+/** Shared conductor constants (Assumption: typical ACSR). */
+export const conductorPhysics = {
+  expansionPerC: sourced(19e-6, '/°C', 'Assumption', 'Linear thermal expansion, ACSR'),
+  ratingAmbientC: sourced(15, '°C', 'Assumption', 'Ambient at which the static rating applies'),
+  ratingWindMs: sourced(0.6, 'm/s', 'Assumption', 'Wind speed at which the static rating applies'),
+  dragCoefficient: sourced(1.0, '', 'Assumption', 'Stranded conductor in cross wind'),
+  airDensity: sourced(1.225, 'kg/m³', 'Public', 'Standard air density'),
+};
 
 export const conductors: Record<number, ConductorClass> = {
   400: {
@@ -113,6 +123,7 @@ export const conductors: Record<number, ConductorClass> = {
     maxDesignTempC: sourced(75, '°C', 'Assumption', typical),
     rulingSpanM: sourced(380, 'm', 'Assumption', typical),
     sagAtDesignM: sourced(13, 'm', 'Assumption', typical),
+    massKgPerM: sourced(1.95, 'kg/m', 'Assumption', 'Per sub-conductor'),
   },
   275: {
     diameterMm: sourced(28.6, 'mm', 'Assumption', typical),
@@ -120,6 +131,7 @@ export const conductors: Record<number, ConductorClass> = {
     maxDesignTempC: sourced(75, '°C', 'Assumption', typical),
     rulingSpanM: sourced(350, 'm', 'Assumption', typical),
     sagAtDesignM: sourced(11.5, 'm', 'Assumption', typical),
+    massKgPerM: sourced(1.6, 'kg/m', 'Assumption', typical),
   },
   220: {
     diameterMm: sourced(31.5, 'mm', 'Assumption', typical),
@@ -127,6 +139,7 @@ export const conductors: Record<number, ConductorClass> = {
     maxDesignTempC: sourced(80, '°C', 'Assumption', 'Uprated design temperature'),
     rulingSpanM: sourced(330, 'm', 'Assumption', typical),
     sagAtDesignM: sourced(10.5, 'm', 'Assumption', typical),
+    massKgPerM: sourced(1.95, 'kg/m', 'Assumption', typical),
   },
   110: {
     diameterMm: sourced(21.0, 'mm', 'Assumption', typical),
@@ -134,6 +147,7 @@ export const conductors: Record<number, ConductorClass> = {
     maxDesignTempC: sourced(50, '°C', 'Assumption', 'Older lines were designed for 50 °C'),
     rulingSpanM: sourced(240, 'm', 'Assumption', 'Wood poleset spans'),
     sagAtDesignM: sourced(6.5, 'm', 'Assumption', typical),
+    massKgPerM: sourced(1.1, 'kg/m', 'Assumption', typical),
   },
 };
 

@@ -12,7 +12,7 @@ import { DataUtils } from 'three/webgpu';
 export interface DecodeRequest {
   id: number;
   url: string;
-  kind: 'tile' | 'sdf' | 'rgb8';
+  kind: 'tile' | 'sdf' | 'rgb8' | 'grey8';
   hOffset: number;
   hScale: number;
   sdfScale: number;
@@ -65,6 +65,11 @@ self.onmessage = async (ev: MessageEvent<DecodeRequest>) => {
         if (w !== png.width) gpu[y * w + png.width] = gpu[y * w + png.width - 1]!;
       }
       const out: DecodeResponse = { id: req.id, ok: true, width: w, height: png.height, gpu };
+      (self as DedicatedWorkerGlobalScope).postMessage(out, [gpu.buffer]);
+    } else if (req.kind === 'grey8') {
+      const gpu = new Uint8Array(n);
+      for (let i = 0; i < n; i++) gpu[i] = src[i * png.channels]!;
+      const out: DecodeResponse = { id: req.id, ok: true, width: png.width, height: png.height, gpu };
       (self as DedicatedWorkerGlobalScope).postMessage(out, [gpu.buffer]);
     } else {
       const ch = png.channels;

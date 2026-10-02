@@ -3,6 +3,7 @@ import {
   DataTexture,
   HalfFloatType,
   LinearFilter,
+  NearestFilter,
   NoColorSpace,
   RedFormat,
   RGBAFormat,
@@ -147,17 +148,23 @@ export class TileStore {
     }
   }
 
-  async loadNational(): Promise<{ sdf: DataTexture; mask: DataTexture }> {
-    const [s, m] = await Promise.all([
+  async loadNational(): Promise<{ sdf: DataTexture; mask: DataTexture; landcover: DataTexture }> {
+    const [s, m, l] = await Promise.all([
       this.decode({ url: `${DATA_ROOT}/national_sdf.png`, kind: 'sdf' }),
       this.decode({ url: `${DATA_ROOT}/national_mask.png`, kind: 'rgb8' }),
+      this.decode({ url: `${DATA_ROOT}/landcover.png`, kind: 'grey8' }),
     ]);
     if (!s.ok || !m.ok) throw new Error(`national textures: ${s.error ?? m.error}`);
     const sdf = new DataTexture(s.gpu!, s.width!, s.height!, RedFormat, HalfFloatType);
     const mask = new DataTexture(m.gpu!, m.width!, m.height!, RGBAFormat, UnsignedByteType);
     configure(sdf);
     configure(mask);
-    return { sdf, mask };
+    if (!l.ok) throw new Error(`landcover: ${l.error}`);
+    const landcover = new DataTexture(l.gpu!, l.width!, l.height!, RedFormat, UnsignedByteType);
+    configure(landcover);
+    landcover.minFilter = NearestFilter;
+    landcover.magFilter = NearestFilter;
+    return { sdf, mask, landcover };
   }
 
   private evict(): void {

@@ -31,3 +31,12 @@ export const m3Shots: Shot[] = [
   { name: 'control-regional-northwest-1800', query: 'theme=control&view=-8.3,54.4,90000,50,190&hours=18', settleMs: 24_000 },
   { name: 'specimen-national-webgl', query: 'backend=webgl&hours=15' },
 ];
+
+export const m4Shots: Shot[] = [
+  { name: 'specimen-flagford-substation-1500', query: 'view=-8.1239,53.9117,650,58,150&hours=15', settleMs: 30_000 },
+  { name: 'control-flagford-substation-1900', query: 'theme=control&view=-8.1239,53.9117,650,58,150&hours=19', settleMs: 30_000 },
+  { name: 'specimen-400kv-tower-1600', query: 'view=-8.0086,52.8440,420,72,130&hours=16', settleMs: 30_000 },
+  { name: 'specimen-oweninny-turbines-1100', query: 'view=-9.6150,54.1450,1400,68,160&hours=11', settleMs: 30_000 },
+  { name: 'specimen-bellacorick-site-1700', query: 'view=-9.5735,54.1180,1300,60,200&hours=17', settleMs: 30_000 },
+  { name: 'control-clonee-campus-1830', query: 'theme=control&view=-6.419,53.4135,1500,62,210&hours=18.5', settleMs: 30_000 },
+];

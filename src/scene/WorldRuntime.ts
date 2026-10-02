@@ -23,6 +23,10 @@ import { createBackgroundNode, createHazeNode } from './sky/skyNodes';
 import { computeLighting, type LightingState } from './world/lighting';
 import { world } from './world/uniforms';
 import { NetworkLayer } from './network/NetworkLayer';
+import { AssetLayer } from './assets/AssetLayer';
+import { Sites } from './assets/Sites';
+import { dataCentreClusters, northWestLargeUser } from '@/config/system';
+import { scenarios } from '@/sim/scenarios';
 import { sampleBranch, useSim } from '@/sim/client';
 import type { ModelMeta } from '@/sim/protocol';
 import type { NetworkData } from '@/sim/types';
@@ -64,9 +68,10 @@ export class WorldRuntime {
     const store = new TileStore(manifest);
     await store.preload(3);
     onProgress?.('Loading coastline');
-    const { sdf, mask } = await store.loadNational();
+    const { sdf, mask, landcover } = await store.loadNational();
     national.sdf.value = sdf;
     national.mask.value = mask;
+    national.landcover.value = landcover;
     return new WorldRuntime(renderer, scene, camera, store);
   }
 
@@ -106,6 +111,8 @@ export class WorldRuntime {
   }
 
   network: NetworkLayer | null = null;
+  assets: AssetLayer | null = null;
+  sites: Sites | null = null;
   private networkLoading = false;
   private flowBuf = new Float32Array(0);
   private loadBuf = new Float32Array(0);
@@ -120,6 +127,21 @@ export class WorldRuntime {
     ]);
     this.network = new NetworkLayer(net, lines, meta, (x, z) => this.terrain.heightAt(x, z));
     this.scene.add(this.network.group);
+    const [supIndex, supBin, turbBin] = await Promise.all([
+      fetch(`${base}/supports.json`).then((r) => r.json() as Promise<Record<string, [number, number]>>),
+      fetch(`${base}/supports.bin`).then((r) => r.arrayBuffer()),
+      fetch(`${base}/turbines.bin`).then((r) => r.arrayBuffer()),
+    ]);
+    this.assets = new AssetLayer(meta, supIndex, new Float32Array(supBin), new Float32Array(turbBin), (x, z) =>
+      this.terrain.heightAt(x, z),
+    );
+    this.scene.add(this.assets.group);
+    const campuses = [
+      ...dataCentreClusters.map((c) => ({ id: c.id, station: c.station, halls: Math.max(2, Math.round(c.share.value * 30)) })),
+      { id: northWestLargeUser.id, station: northWestLargeUser.station, halls: 2 },
+    ];
+    this.sites = new Sites(net, meta, campuses, (x, z) => this.terrain.heightAt(x, z));
+    this.scene.add(this.sites.group);
     (window as unknown as { __twinNetwork?: boolean }).__twinNetwork = true;
     const nb = meta.branches.length;
     this.flowBuf = new Float32Array(nb);
@@ -145,6 +167,17 @@ export class WorldRuntime {
       { flows: this.flowBuf, loading: this.loadBuf, n1: this.n1Buf, tripped, dt, altitude: Math.max(1, this.camera.position.y) },
       this.camera,
     );
+    this.sites?.update(this.camera, dt);
+    if (this.assets) {
+      const sc = scenarios[sim.inputs.scenario];
+      this.assets.update(this.camera, {
+        hours,
+        dt,
+        loading: this.loadBuf,
+        wind: { reference: sc.windRef, front: sc.front, seed: sc.seed, scale: sim.inputs.windScale },
+        ambientC: sc.date.m >= 11 || sc.date.m <= 3 ? 7 : 13,
+      });
+    }
   }
 
   update(state: Pick<WorldState, 'theme' | 'date' | 'hours'>, dt: number): void {

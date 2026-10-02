@@ -106,12 +106,20 @@ export const ExploreControls = forwardRef<ControlsHandle>(function ExploreContro
     if (!t) return;
     // Keep the camera above ground and the orbit target on it.
     const ex = world.exaggeration.value;
+    // Keep the orbit target on the ground so orbiting pivots about the land, not sea level.
+    const target = controls.getTarget(tmp);
+    const groundAtTarget = Math.max(0, t.heightAt(target.x, target.z)) * ex;
+    if (Math.abs(groundAtTarget - target.y) > 0.5 && controls.currentAction === 0) {
+      const ny = target.y + (groundAtTarget - target.y) * Math.min(1, delta * 4);
+      const pos = camera.position;
+      controls.setLookAt(pos.x, pos.y + (ny - target.y), pos.z, target.x, ny, target.z, false);
+    }
     const p = camera.position;
     const ground = Math.max(0, t.heightAt(p.x, p.z)) * ex;
     const clearance = 40 + 0.02 * Math.max(0, p.y - ground);
     if (p.y < ground + clearance) {
-      const target = controls.getTarget(tmp);
-      controls.setLookAt(p.x, ground + clearance, p.z, target.x, target.y, target.z, false);
+      const tg = controls.getTarget(tmp);
+      controls.setLookAt(p.x, ground + clearance, p.z, tg.x, tg.y, tg.z, false);
     }
   }, -1);
 

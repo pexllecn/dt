@@ -62,4 +62,7 @@ export const frameStats = {
   terrainNodes: 0,
   altitude: 0,
   exaggeration: 2.5,
+  supports: 0,
+  conductors: 0,
+  turbines: 0,
 };
