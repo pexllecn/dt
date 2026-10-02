@@ -1,0 +1,9 @@
+numpy==2.3.*
+scipy==1.16.*
+rasterio==1.4.4
+pyproj==3.7.2
+shapely==2.1.*
+pyarrow==21.*
+requests==2.32.*
+pypng==0.20220715.0
+Pillow==11.*

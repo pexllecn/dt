@@ -1,7 +1,18 @@
 # Cognitive Grid Twin: build plan
 
-Milestone 1 of 8. For approval. No application code has been written yet.
-2 October 2026
+Approved 2 October 2026. Decisions recorded in §0.
+
+---
+
+## 0. Decisions (2 October 2026)
+
+| Question | Decision |
+|---|---|
+| Deviations in §3 | Approved: React 19, three.js TSL post-processing, Overture as the OSM source, GSAP, NI simulated but greyed |
+| Timing | EirGrid session in November 2026. Cut line set accordingly (§12). |
+| Immersive | Igloo room with **four walls and a floor** (CAVE-style). The rig renders five 90° views from one eye point (front, left, right, back, floor) and outputs either a face layout or an equirectangular frame, whichever the room's software ingests. Exact input format and per-face resolution still to be confirmed. |
+| Narration | Optional layer uses the Anthropic API through one Vercel function, off by default |
+| Hero connection point | Nearest existing 110 kV station in north Mayo, chosen from the data and labelled "connection point assumed" |
 
 ---
 
@@ -301,7 +312,7 @@ Editorial details:
   - the sim state the beat needs, expressed as an input-log prefix, so jumping to any beat is deterministic.
 - **Controls.** Space plays and pauses. Right and Left move between beats. 1 to 4 jump to a scenario.
 - **Camera.** Director mode never orbits. Moves are eased and motivated, with terrain clearance enforced. Explore mode uses camera-controls with damping and terrain collision.
-- **Immersive.** A configurable wide canvas (default 5760 × 1080) with a multi-camera cylindrical rig: N cameras at equal yaw steps, one per viewport. UI is scaled for reading at distance.
+- **Immersive.** A CAVE rig for a four-wall-and-floor room: five 90° cameras sharing one eye point (front, left, right, back, floor), rendered either as a face layout or resampled to an equirectangular frame. Captions and the status pill are drawn on the front wall, scaled for reading at distance.
 
 ---
 

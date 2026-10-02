@@ -1,0 +1,83 @@
+@import 'tailwindcss';
+@import '@fontsource/source-serif-4/400.css';
+@import '@fontsource/source-serif-4/400-italic.css';
+@import '@fontsource/source-serif-4/600-italic.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+@theme {
+  --font-serif: 'Iowan Old Style', 'Palatino', 'Palatino Linotype', 'Book Antiqua', 'Source Serif 4', Georgia, serif;
+  --font-sans: 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
+  --font-mono: 'SF Mono', Menlo, 'IBM Plex Mono', Consolas, monospace;
+  --color-ground: var(--ground);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-hairline: var(--hairline);
+  --color-crimson: var(--crimson);
+  --color-amber: var(--amber);
+  --color-cool: var(--cool);
+  --color-ok: var(--ok);
+  --color-panel: var(--panel);
+}
+
+:root,
+[data-theme='specimen'] {
+  --ground: #efeae0;
+  --panel: rgba(239, 234, 224, 0.86);
+  --ink: #1b1a17;
+  --ink-soft: #4a4741;
+  --ink-faint: #8a857b;
+  --hairline: rgba(27, 26, 23, 0.22);
+  --crimson: #a8231b;
+  --amber: #a86a12;
+  --cool: #2c4f66;
+  --ok: #2f7a4a;
+}
+
+[data-theme='control'] {
+  --ground: #0a0c0f;
+  --panel: rgba(10, 12, 15, 0.78);
+  --ink: #ebe8e1;
+  --ink-soft: #b4b0a6;
+  --ink-faint: #6d6a63;
+  --hairline: rgba(235, 232, 225, 0.2);
+  --crimson: #e2483c;
+  --amber: #e2a23a;
+  --cool: #7cc0e0;
+  --ok: #58c27d;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 600ms ease;
+}
+
+.figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.caption {
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+.hairline {
+  border-color: var(--hairline);
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+.breathe { animation: breathe 2.4s ease-in-out infinite; }
