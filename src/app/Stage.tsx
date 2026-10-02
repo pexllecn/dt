@@ -7,6 +7,8 @@ import { ExploreControls, type ControlsHandle } from './ExploreControls';
 import { installWebGPUCompat } from '@/render/compat';
 import { BenchDriver } from './BenchDriver';
 import { startSimulation } from '@/sim/client';
+import { bridge } from './bridge';
+import { world } from '@/scene/world/uniforms';
 
 const benchMode = new URLSearchParams(location.search).has('bench');
 
@@ -31,6 +33,10 @@ function World({ controls }: { controls: React.RefObject<ControlsHandle | null> 
         if (disposed) return rt.dispose();
         runtime.current = rt;
         controls.current?.setTerrain(rt.terrain);
+        bridge.camera = camera as THREE.PerspectiveCamera;
+        bridge.heightAt = (x, z) => rt.terrain.heightAt(x, z);
+        bridge.pickBranch = (px, py, w, h) =>
+          rt.network ? rt.network.pick(px, py, w, h, camera as THREE.PerspectiveCamera, world.exaggeration.value, Math.max(1, camera.position.y)) : -1;
         setReady(true);
       })
       .catch((e) => {

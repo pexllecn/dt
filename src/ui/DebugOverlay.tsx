@@ -27,7 +27,7 @@ export function DebugOverlay() {
   ];
   return (
     <div
-      className="figure pointer-events-none absolute left-8 top-28 border hairline px-3 py-2 text-[10.5px] leading-[1.55] text-ink backdrop-blur-sm"
+      className="figure pointer-events-none absolute left-8 top-36 border hairline px-3 py-2 text-[10.5px] leading-[1.55] text-ink backdrop-blur-sm"
       style={{ background: 'var(--panel)' }}
     >
       {rows.map(([k, v]) => (

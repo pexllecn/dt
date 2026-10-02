@@ -16,6 +16,7 @@ import {
 import { itmToScene, lonLatToItm } from '@/lib/geo';
 import type { Terrain } from '@/scene/terrain/Terrain';
 import { world } from '@/scene/world/uniforms';
+import { useUi } from '@/ui/uiStore';
 
 CameraControls.install({ THREE: { Box3, Matrix4, Quaternion, Raycaster, Sphere, Spherical, Vector2, Vector3, Vector4 } });
 
@@ -87,6 +88,31 @@ export const ExploreControls = forwardRef<ControlsHandle>(function ExploreContro
     }
     return () => controls.dispose();
   }, [controls]);
+
+  // Fly-to requests from the panels: keep the current heading, settle at a 55 degree view.
+  useEffect(
+    () =>
+      useUi.subscribe((s, prev) => {
+        const f = s.flyTo;
+        if (!f || f === prev.flyTo) return;
+        const [x, z] = itmToScene(f.e, f.n);
+        const t = terrainRef.current;
+        const g = t ? Math.max(0, t.heightAt(x, z)) : 0;
+        const az = controls.azimuthAngle;
+        const pol = (55 * Math.PI) / 180;
+        const r = f.distance;
+        void controls.setLookAt(
+          x + r * Math.sin(pol) * Math.sin(az),
+          g + r * Math.cos(pol),
+          z + r * Math.sin(pol) * Math.cos(az),
+          x,
+          g,
+          z,
+          true,
+        );
+      }),
+    [controls, terrainRef],
+  );
 
   useImperativeHandle(
     ref,

@@ -7,14 +7,14 @@ const dot: Record<PillState['tone'], string> = {
   idle: 'bg-ink-faint',
 };
 
-export function StatusPill({ state }: { state: PillState }) {
+export function StatusPill({ state, offset = 32 }: { state: PillState; offset?: number }) {
   const alert = state.tone === 'alert';
   return (
     <div
-      className={`pointer-events-none absolute right-8 top-7 flex items-center gap-2.5 rounded-full border px-3.5 py-1.5 backdrop-blur-sm ${
+      className={`pointer-events-none absolute top-7 z-40 flex transition-[right] duration-500 items-center gap-2.5 rounded-full border px-3.5 py-1.5 backdrop-blur-sm ${
         alert ? 'border-crimson text-crimson' : 'hairline text-ink'
       }`}
-      style={{ background: 'var(--panel)' }}
+      style={{ background: 'var(--panel)', right: offset }}
       role="status"
     >
       <span className={`inline-block h-[7px] w-[7px] rounded-full ${dot[state.tone]}`} />

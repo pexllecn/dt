@@ -1,4 +1,4 @@
-import { baseMVA, branchOverrides, circuitClass, transformerClass } from '@/config/network';
+import { addedCables, baseMVA, branchOverrides, circuitClass, transformerClass } from '@/config/network';
 import {
   dataCentreClusters,
   interconnectors,
@@ -126,7 +126,16 @@ export function buildModel(bundle: NetworkBundle): Model {
 
   const branches: Branch[] = [];
   const hvdcRoutes: NetBranch[] = [];
-  for (const br of network.branches) {
+  const busAt = (station: string, kv: number) => {
+    const node = network.nodes.find((n) => n.kind === 'station' && n.name === station);
+    return node ? network.buses.find((b) => b.node === node.id && b.kv === kv)?.id : undefined;
+  };
+  const added: NetBranch[] = addedCables.flatMap((c) => {
+    const from = busAt(c.from, c.kv);
+    const to = busAt(c.to, c.kv);
+    return from && to ? [{ id: c.id, from, to, kind: 'cable' as const, kv: c.kv, lengthKm: c.lengthKm, cableFraction: 1, circuits: c.circuits, name: c.note }] : [];
+  });
+  for (const br of [...network.branches, ...added]) {
     if (br.kind === 'hvdc') {
       hvdcRoutes.push(br);
       continue;

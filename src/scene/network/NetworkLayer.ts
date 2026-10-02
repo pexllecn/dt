@@ -29,6 +29,7 @@ import {
   select,
   smoothstep,
   texture,
+  uniform,
   varyingProperty,
   vec2,
   vec3,
@@ -126,6 +127,8 @@ export class NetworkLayer {
   readonly ribbonMaterial: MeshBasicNodeMaterial;
   readonly particleMaterial: MeshBasicNodeMaterial;
   private readonly maxParticles = 60_000;
+  /** Index of the branch shown in the inspector (-1 for none). */
+  readonly selected = uniform(-1);
 
   constructor(net: NetworkData, lines: Record<string, number[][]>, meta: ModelMeta, heightAt: (x: number, z: number) => number) {
     this.heightAt = heightAt;
@@ -226,7 +229,11 @@ export class NetworkLayer {
     mat.vertexNode = Fn(() => {
       const pa = vec3(iA.x, iA.y.mul(world.exaggeration).add(lift), iA.z);
       const pb = vec3(iB.x, iB.y.mul(world.exaggeration).add(lift), iB.z);
-      const w = iMeta.y.mul(zoomWidth).add(1); // +1 px for the anti-aliased edge
+      const isSel = float(1).sub(smoothstep(0.1, 0.5, abs(iMeta.x.sub(this.selected))));
+      // Circuits near or over their rating are drawn wider so the incident reads at any scale.
+      const stV = texture(this.stateTex, vec2(iMeta.x.add(0.5).div(this.nb), 0.5)).level(float(0));
+      const hot = smoothstep(0.88, 0.95, stV.r).mul(float(1).sub(stV.b));
+      const w = iMeta.y.mul(zoomWidth).mul(isSel.mul(1.6).add(1)).mul(hot.mul(0.9).add(1)).add(isSel.mul(3)).add(hot.mul(1.5)).add(1); // +1 px for the anti-aliased edge
       vAlong.assign(mix(iA.w, iB.w, corner.x));
       vSide.assign(corner.y);
       vBranch.assign(iMeta.x);
@@ -359,6 +366,43 @@ export class NetworkLayer {
       for (let k = 0; k < n && this.particleSlots.length < this.maxParticles; k++) this.particleSlots.push({ line: li, base: k * (l.length / n) });
     }
     this.particleGeo.instanceCount = this.particleSlots.length;
+  }
+
+  /**
+   * Branch under a screen point (CSS px), by distance to each projected segment; -1 if none
+   * lies within a few pixels. CPU side, only run on click.
+   */
+  pick(px: number, py: number, w: number, h: number, camera: PerspectiveCamera, exaggeration: number, altitude: number): number {
+    const m = camera.projectionMatrix.clone().multiply(camera.matrixWorldInverse);
+    const e = m.elements;
+    const proj = (x: number, y: number, z: number, out: number[]) => {
+      const cw = e[3]! * x + e[7]! * y + e[11]! * z + e[15]!;
+      if (cw <= 1e-3) return false;
+      out[0] = (((e[0]! * x + e[4]! * y + e[8]! * z + e[12]!) / cw) * 0.5 + 0.5) * w;
+      out[1] = (-((e[1]! * x + e[5]! * y + e[9]! * z + e[13]!) / cw) * 0.5 + 0.5) * h;
+      return true;
+    };
+    const a = [0, 0];
+    const b = [0, 0];
+    let best = -1;
+    let bestD = 9;
+    for (const l of this.lines) {
+      const lift = (l.cable ? 1.5 : style(l.kv).lift) + altitude * 0.0035;
+      for (let j = 0; j < l.cum.length - 1; j++) {
+        if (!proj(l.pts[j * 2]!, l.heights[j]! * exaggeration + lift, l.pts[j * 2 + 1]!, a)) continue;
+        if (!proj(l.pts[j * 2 + 2]!, l.heights[j + 1]! * exaggeration + lift, l.pts[j * 2 + 3]!, b)) continue;
+        const dx = b[0]! - a[0]!;
+        const dy = b[1]! - a[1]!;
+        const L2 = dx * dx + dy * dy || 1;
+        const t = Math.max(0, Math.min(1, ((px - a[0]!) * dx + (py - a[1]!) * dy) / L2));
+        const d = Math.hypot(a[0]! + dx * t - px, a[1]! + dy * t - py);
+        if (d < bestD) {
+          bestD = d;
+          best = l.branch;
+        }
+      }
+    }
+    return best;
   }
 
   update(frame: NetworkFrame, camera: PerspectiveCamera): void {

@@ -26,6 +26,7 @@ import { NetworkLayer } from './network/NetworkLayer';
 import { AssetLayer } from './assets/AssetLayer';
 import { Sites } from './assets/Sites';
 import { dataCentreClusters, northWestLargeUser } from '@/config/system';
+import { useUi } from '@/ui/uiStore';
 import { scenarios } from '@/sim/scenarios';
 import { sampleBranch, useSim } from '@/sim/client';
 import type { ModelMeta } from '@/sim/protocol';
@@ -162,7 +163,10 @@ export class WorldRuntime {
     sampleBranch(day.flows, nb, hours, this.flowBuf);
     sampleBranch(day.loading, nb, hours, this.loadBuf);
     sampleBranch(day.n1Loading, nb, hours, this.n1Buf);
-    const tripped = new Set(sim.inputs.outages.map((id) => meta.branches.findIndex((b) => b.id === id)).filter((i) => i >= 0));
+    const out = [...sim.inputs.outages, ...sim.inputs.timedOutages.filter((t) => hours >= t.fromHour).map((t) => t.id)];
+    const tripped = new Set(out.map((id) => meta.branches.findIndex((b) => b.id === id)).filter((i) => i >= 0));
+    const sel = useUi.getState().selectedBranch;
+    this.network.selected.value = sel ? meta.branches.findIndex((b) => b.id === sel) : -1;
     this.network.update(
       { flows: this.flowBuf, loading: this.loadBuf, n1: this.n1Buf, tripped, dt, altitude: Math.max(1, this.camera.position.y) },
       this.camera,

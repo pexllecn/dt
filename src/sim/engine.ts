@@ -1,7 +1,7 @@
 import { demand, dcAverageMW2025, renewables, storage } from '@/config/system';
 import { sunPosition, irishLocalToUtc } from '@/lib/solar';
 import { buildModel, setTransformerUnits, type Model } from './model';
-import { buildSolver, type DCSolver } from './powerflow';
+import { buildSolver, ptdf, type DCSolver } from './powerflow';
 import { dayType, dcShape, nonDcShape } from './profiles';
 import { dispatch } from './dispatch';
 import { powerCurve, siteSpeed, type WindScenario } from './wind';
@@ -19,11 +19,27 @@ export interface EngineInputs {
   icShare: number;
   /** Extra demand at buses (MW), from the Load tool or a connection request. */
   extraLoad: Record<number, number>;
-  /** Branches out of service (index into model.branches). */
+  /** Branches out of service all day (index into model.branches). */
   outages: number[];
+  /** Branches that trip part-way through the day: out from this step onwards. */
+  timedOutages?: { branch: number; fromStep: number }[];
+  /** Approved actions: MW added at a bus from a step onwards (re-dispatch pairs sum to zero). */
+  adjustments?: { bus: number; deltaMW: number; fromStep: number; windCluster?: number }[];
   /** Units unavailable (index into model.units). */
   unitOutages: number[];
+  /**
+   * Day-ahead constraint management on the planned network (default on): generation is moved
+   * so no circuit is scheduled above 95% of its rating with everything planned in service.
+   * Events after the schedule (timed trips) are left for the agents and the operator.
+   */
+  scheduleConstraints?: boolean;
 }
+
+/** Scheduling limit as a share of rating, and the most MW moved per interval for constraints. */
+const SCHED_LIMIT = 0.95;
+const SCHED_MAX_MW = 900;
+/** Post-fault limit used by the scheduler: short-term emergency rating as a share of continuous (Assumption). */
+const SCHED_N1_LIMIT = 1.2;
 
 export type SeriesKey =
   | 'demand'
@@ -34,6 +50,7 @@ export type SeriesKey =
   | 'wind'
   | 'solar'
   | 'curtailed'
+  | 'constrained'
   | 'imports'
   | 'thermal'
   | 'battery'
@@ -51,6 +68,7 @@ export const SERIES: SeriesKey[] = [
   'wind',
   'solar',
   'curtailed',
+  'constrained',
   'imports',
   'thermal',
   'battery',
@@ -142,6 +160,7 @@ export class Engine {
   readonly model: Model;
   private solver: DCSolver | null = null;
   private solverKey = '';
+  private readonly solverCache = new Map<string, DCSolver>();
   /** Share of each branch lost in its N-1 contingency: one circuit or one transformer unit. */
   alpha = new Float64Array(0);
 
@@ -173,7 +192,7 @@ export class Engine {
   private sizeTransformers(): void {
     const m = this.model;
     for (let pass = 0; pass < 2; pass++) {
-      this.solver = null;
+      this.resetSolvers();
       const day = this.runDay({
         date: { y: 2026, m: 1, d: 14 },
         year: 2026,
@@ -192,15 +211,159 @@ export class Engine {
         setTransformerUnits(b, Math.max(b.unit.count, need));
       }
     }
-    this.solver = null;
+    this.resetSolvers();
   }
 
   solverFor(outages: number[]): DCSolver {
     const key = [...outages].sort((a, b) => a - b).join(',');
     if (this.solver && key === this.solverKey) return this.solver;
-    this.solver = buildSolver(this.model.buses.length, this.model.branches, new Set(outages), this.model.slack);
+    let s = this.solverCache.get(key);
+    if (!s) {
+      s = buildSolver(this.model.buses.length, this.model.branches, new Set(outages), this.model.slack);
+      if (this.solverCache.size > 6) this.solverCache.clear();
+      this.solverCache.set(key, s);
+    }
+    this.solver = s;
     this.solverKey = key;
-    return this.solver;
+    return s;
+  }
+
+  /** Branches out of service at a given step. */
+  outagesAt(inp: EngineInputs, step: number): number[] {
+    const timed = (inp.timedOutages ?? []).filter((t) => step >= t.fromStep).map((t) => t.branch);
+    return [...new Set([...inp.outages, ...timed])];
+  }
+
+  /** Clears cached solvers (after transformer sizing changes reactances). */
+  resetSolvers(): void {
+    this.solver = null;
+    this.solverCache.clear();
+  }
+
+  /**
+   * Day-ahead constraint management (METHOD-SCHED-01). On the planned topology, first keep every
+   * circuit below the scheduling limit with everything in service, then keep the worst single
+   * outage below the short-term emergency limit (preventive N-1). Each step moves generation from
+   * the injection that loads the constraint most (wind first, then thermal above minimum) to the
+   * unit that unloads it most, using PTDF (and LODF) sensitivities. Mutates injections, unit
+   * output and cluster wind.
+   */
+  private constrain(
+    inj: Float64Array,
+    unitMW: Float64Array,
+    windMW: Float32Array,
+    ratings: Float32Array,
+    planned: number[],
+    available: (u: number) => boolean,
+  ): { moved: number; windDown: number } {
+    const m = this.model;
+    const nb = m.branches.length;
+    const sched = this.solverFor(planned);
+    const flows = new Float64Array(nb);
+    let moved = 0;
+    let windDown = 0;
+
+    /** Move up to `excess / effectiveness` MW against a constraint with sensitivity `sens`. */
+    const relieve = (sens: (bus: number) => number, excess: number): boolean => {
+      let down: { kind: 'wind' | 'unit'; i: number; sens: number; room: number } | null = null;
+      m.wind.forEach((w, i) => {
+        if (windMW[i]! < 1 || !sched.energised[w.bus]) return;
+        const sv = sens(w.bus);
+        if (sv > 0.03 && (!down || sv > down.sens + 1e-6)) down = { kind: 'wind', i, sens: sv, room: windMW[i]! };
+      });
+      for (const u of m.units) {
+        const mw = unitMW[u.idx]!;
+        if (mw - u.min < 1 || !sched.energised[u.bus]) continue;
+        const sv = sens(u.bus);
+        const cur = down as { sens: number } | null;
+        if (sv > 0.03 && (!cur || sv > cur.sens + 0.02)) down = { kind: 'unit', i: u.idx, sens: sv, room: mw - u.min };
+      }
+      const d = down as { kind: 'wind' | 'unit'; i: number; sens: number; room: number } | null;
+      if (!d) return false;
+      // Raise the unit that unloads the constraint most relative to the one turned down; among
+      // near-equal sensitivities, the cheapest.
+      let up: { i: number; sens: number; room: number; cost: number } | null = null;
+      for (const u of m.units) {
+        if (!available(u.idx) || !sched.energised[u.bus] || u.capacity - unitMW[u.idx]! < 1) continue;
+        const sv = sens(u.bus);
+        if (sv > d.sens - 0.05) continue;
+        if (!up || sv < up.sens - 0.02 || (Math.abs(sv - up.sens) <= 0.02 && u.spec.cost < up.cost))
+          up = { i: u.idx, sens: sv, room: u.capacity - unitMW[u.idx]!, cost: u.spec.cost };
+      }
+      if (!up) return false;
+      const eff = d.sens - up.sens;
+      const mw = Math.min(d.room, up.room, (excess + 1) / eff, SCHED_MAX_MW - moved);
+      if (mw < 0.5) return false;
+      const downBus = d.kind === 'wind' ? m.wind[d.i]!.bus : m.units[d.i]!.bus;
+      inj[downBus] = inj[downBus]! - mw;
+      if (d.kind === 'wind') {
+        windMW[d.i] = windMW[d.i]! - mw;
+        windDown += mw;
+      } else unitMW[d.i] = unitMW[d.i]! - mw;
+      const upUnit = m.units[up.i]!;
+      unitMW[up.i] = unitMW[up.i]! + mw;
+      inj[upUnit.bus] = inj[upUnit.bus]! + mw;
+      moved += mw;
+      return true;
+    };
+
+    // 1. Intact network.
+    const skip = new Set<number>();
+    for (let iter = 0; iter < 24 && moved < SCHED_MAX_MW; iter++) {
+      sched.flows(inj, flows);
+      let l = -1;
+      let worst = SCHED_LIMIT + 0.005;
+      for (let k = 0; k < nb; k++) {
+        if (!sched.active[k] || skip.has(k)) continue;
+        const ld = Math.abs(flows[k]!) / ratings[k]!;
+        if (ld > worst) {
+          worst = ld;
+          l = k;
+        }
+      }
+      if (l < 0) break;
+      const dir = Math.sign(flows[l]!) || 1;
+      if (!relieve((bus) => dir * ptdf(sched, m.branches, l, bus), Math.abs(flows[l]!) - SCHED_LIMIT * ratings[l]!)) skip.add(l);
+    }
+
+    // 2. Preventive N-1 against the short-term emergency limit.
+    sched.flows(inj, flows);
+    const pairs: { l: number; k: number; over: number }[] = [];
+    for (let k = 0; k < nb; k++) {
+      if (!sched.active[k]) continue;
+      const alpha = this.alpha[k]!;
+      if (alpha === 1 && sched.islanding[k]) continue;
+      const fk = flows[k]!;
+      if (Math.abs(fk) < 0.5) continue;
+      const sk = sched.transfer[k * nb + k]!;
+      const scale = (alpha * fk) / (1 - alpha * sk);
+      for (let l = 0; l < nb; l++) {
+        if (!sched.active[l] || (l === k && alpha === 1)) continue;
+        const post = l === k ? fk / (1 - alpha * sk) : flows[l]! + sched.transfer[l * nb + k]! * scale;
+        const over = Math.abs(post) / ratings[l]!;
+        if (over > SCHED_N1_LIMIT + 0.01) pairs.push({ l, k, over });
+      }
+    }
+    pairs.sort((a, b) => b.over - a.over);
+    const done = new Set<number>();
+    for (const { l, k } of pairs.slice(0, 40)) {
+      if (done.has(l) || moved >= SCHED_MAX_MW) continue;
+      done.add(l);
+      for (let iter = 0; iter < 4; iter++) {
+        sched.flows(inj, flows);
+        const alpha = this.alpha[k]!;
+        const sk = sched.transfer[k * nb + k]!;
+        const c = l === k ? 1 / (1 - alpha * sk) : (sched.transfer[l * nb + k]! * alpha) / (1 - alpha * sk);
+        const post = l === k ? flows[k]! * c : flows[l]! + c * flows[k]!;
+        const excess = Math.abs(post) - SCHED_N1_LIMIT * ratings[l]!;
+        if (excess <= 0) break;
+        const dir = Math.sign(post) || 1;
+        const sens = (bus: number) =>
+          dir * (l === k ? c * ptdf(sched, m.branches, k, bus) : ptdf(sched, m.branches, l, bus) + c * ptdf(sched, m.branches, k, bus));
+        if (!relieve(sens, excess)) break;
+      }
+    }
+    return { moved, windDown };
   }
 
   runDay(inp: EngineInputs): DayResult {
@@ -209,7 +372,7 @@ export class Engine {
     const nBus = m.buses.length;
     const nU = m.units.length;
     const nW = m.wind.length;
-    const solver = this.solverFor(inp.outages);
+    let solver = this.solverFor(inp.outages);
     const g = growth(inp.year);
     const type = dayType(inp.date.y, inp.date.m, inp.date.d);
 
@@ -280,6 +443,7 @@ export class Engine {
 
     for (let s = 0; s < STEPS; s++) {
       const p = plan[s]!;
+      solver = this.solverFor(this.outagesAt(inp, s));
       const d = dispatch(m, {
         demandMW: p.total,
         windAvailMW: p.windAvail,
@@ -316,6 +480,21 @@ export class Engine {
       m.solar.forEach((site) => (inj[site.bus] = inj[site.bus]! + site.share * p.solar * fSolar));
       m.batteries.forEach((bt) => (inj[bt.bus] = inj[bt.bus]! + bt.share * batteryPlan[s]!));
       for (const ic of ics) inj[ic.bus] = inj[ic.bus]! + inp.icShare * ic.spec.capacity.value;
+      const constrained =
+        inp.scheduleConstraints === false
+          ? { moved: 0, windDown: 0 }
+          : this.constrain(inj, d.unitMW, res.windMW.subarray(s * nW, (s + 1) * nW), res.ratings, inp.outages, (u) => !unitDown.has(u));
+      solver = this.solverFor(this.outagesAt(inp, s));
+      // Approved actions (re-dispatch, battery discharge, demand flexibility).
+      let windCut = 0;
+      for (const a of inp.adjustments ?? []) {
+        if (s < a.fromStep) continue;
+        inj[a.bus] = inj[a.bus]! + a.deltaMW;
+        if (a.windCluster !== undefined && a.deltaMW < 0) {
+          windCut += -a.deltaMW;
+          res.windMW[s * nW + a.windCluster] = Math.max(0, res.windMW[s * nW + a.windCluster]! + a.deltaMW);
+        }
+      }
 
       // De-energised buses (islanded by outages) lose their load and generation.
       let islanded = 0;
@@ -372,9 +551,10 @@ export class Engine {
       se.niDemand[s] = p.niLoad * losses;
       se.dc[s] = p.dc;
       se.windAvail[s] = p.windAvail;
-      se.wind[s] = d.windMW;
+      se.wind[s] = d.windMW - windCut - constrained.windDown;
       se.solar[s] = d.solarMW;
-      se.curtailed[s] = d.curtailedMW;
+      se.curtailed[s] = d.curtailedMW + windCut;
+      se.constrained[s] = constrained.moved;
       se.imports[s] = icImport;
       se.thermal[s] = d.unitMW.reduce((a, b) => a + b, 0);
       se.battery[s] = batteryPlan[s]!;

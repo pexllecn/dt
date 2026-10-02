@@ -86,3 +86,42 @@ body,
 .halo {
   text-shadow: 0 0 10px var(--ground), 0 0 3px var(--ground), 0 0 1px var(--ground);
 }
+
+/* Specimen sliders: a hairline track and a small ink square. */
+.specimen-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+.specimen-range::-webkit-slider-runnable-track {
+  height: 1px;
+  background: var(--ink-soft);
+}
+.specimen-range::-moz-range-track {
+  height: 1px;
+  background: var(--ink-soft);
+}
+.specimen-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 9px;
+  height: 9px;
+  margin-top: -4px;
+  background: var(--ink);
+  border: 2px solid var(--ground);
+  box-sizing: content-box;
+  transform: rotate(45deg);
+}
+.specimen-range::-moz-range-thumb {
+  width: 9px;
+  height: 9px;
+  background: var(--ink);
+  border: 2px solid var(--ground);
+  border-radius: 0;
+  transform: rotate(45deg);
+}
+.specimen-range:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 3px;
+}

@@ -1,5 +1,6 @@
 import type { ScenarioId } from './scenarios';
 import type { DayResult } from './engine';
+import type { AgentDay, AgentInfo } from '@/agents/engine';
 
 export interface SimInputs {
   scenario: ScenarioId;
@@ -11,8 +12,15 @@ export interface SimInputs {
   icShare: number | null;
   /** Extra demand by bus id, MW. */
   extraLoad: Record<string, number>;
-  /** Branch ids out of service. */
+  /** Branch ids out of service all day. */
   outages: string[];
+  /** Branch ids that trip part-way through the day. */
+  timedOutages: { id: string; fromHour: number }[];
+  /** Approved actions applied from an hour onwards. */
+  adjustments: { bus: string; deltaMW: number; fromHour: number; windCluster?: number }[];
+  /** Communications to Region W lost from this hour (null = none). */
+  commsLostFromHour: number | null;
+  stalePolicy: 'consistency' | 'availability';
 }
 
 export interface BranchMeta {
@@ -33,6 +41,9 @@ export interface ModelMeta {
   units: { id: string; name: string; bus: string; capacity: number }[];
   wind: { bus: string; name: string; e: number; n: number }[];
   contingencyLabels: string[];
+  agents: AgentInfo[];
+  ruleSetVersion: string;
+  ruleSetHash: string;
 }
 
 export type ToWorker =
@@ -41,5 +52,5 @@ export type ToWorker =
 
 export type FromWorker =
   | { type: 'ready'; meta: ModelMeta; ms: number }
-  | { type: 'day'; day: DayResult; inputs: SimInputs; ms: number }
+  | { type: 'day'; day: DayResult; agents: Omit<AgentDay, 'agents'>; inputs: SimInputs; ms: number }
   | { type: 'error'; message: string };

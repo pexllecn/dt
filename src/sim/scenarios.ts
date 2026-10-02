@@ -15,6 +15,8 @@ export interface ScenarioDef {
   seed: number;
   windRef: (h: number) => number;
   front?: WindFront;
+  /** Scripted events: circuits (by label) that trip, and the hour comms to Region W are lost. */
+  events?: { trips: { label: string; hour: number }[]; commsLostHour?: number };
 }
 
 export const scenarios: Record<ScenarioId, ScenarioDef> = {
@@ -45,6 +47,7 @@ export const scenarios: Record<ScenarioId, ScenarioDef> = {
     seed: 21,
     windRef: (h) => 9 + 2 * Math.sin(((h - 10) / 24) * 2 * Math.PI),
     front: { arrivalHour: 9, speedKmh: 45, boost: 12, widthKm: 60 },
+    events: { trips: [{ label: 'Flagford to Srananagh 220 kV', hour: 12 }], commsLostHour: 11.75 },
   },
   y2034: {
     id: 'y2034',

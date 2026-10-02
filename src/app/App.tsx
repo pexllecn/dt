@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { detectCapability, type Capability } from '@/render/backend';
 import { useWorld } from './store';
 import { useKeys } from './useKeys';
+import { useSim } from '@/sim/client';
+import { scenarios } from '@/sim/scenarios';
 import { Stage } from './Stage';
 import { Masthead } from '@/ui/Masthead';
-import { StatusPill } from '@/ui/StatusPill';
 import { DataBadge } from '@/ui/DataBadge';
 import { TimeScrubber } from '@/ui/TimeScrubber';
 import { DebugOverlay } from '@/ui/DebugOverlay';
@@ -12,11 +13,22 @@ import { FallbackCard } from '@/ui/FallbackCard';
 import { LoadingVeil } from '@/ui/LoadingVeil';
 import { BenchPanel } from '@/ui/BenchPanel';
 import { StatsRow } from '@/ui/StatsRow';
+import { SystemPill } from '@/ui/SystemPill';
+import { SpecimenPanel } from '@/ui/SpecimenPanel';
+import { AgentFeed } from '@/ui/AgentFeed';
+import { AuditLog, Recommendations } from '@/ui/Recommendations';
+import { Inspector } from '@/ui/Inspector';
+import { Glyphs } from '@/ui/Glyphs';
+import { Picker } from '@/ui/Picker';
+import { Toast } from '@/ui/Toast';
+import { Governance, Notes } from '@/ui/Notes';
+import { Toolbar } from '@/ui/Toolbar';
 
 export function App() {
   const [cap, setCap] = useState<Capability | null>(null);
   const theme = useWorld((s) => s.theme);
-  const timeRate = useWorld((s) => s.timeRate);
+  const ready = useWorld((s) => s.ready);
+  const bench = new URLSearchParams(location.search).has('bench');
   const setBackend = useWorld((s) => s.setBackend);
   useKeys();
 
@@ -31,6 +43,15 @@ export function App() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
+  // The world (sun, season, labels) follows the scenario's date.
+  useEffect(
+    () =>
+      useSim.subscribe((s, prev) => {
+        if (s.inputs.scenario !== prev.inputs.scenario || !prev.meta) useWorld.setState({ date: scenarios[s.inputs.scenario].date });
+      }),
+    [],
+  );
+
   if (!cap) return null;
   if (!cap.backend) return <FallbackCard reason={cap.reason ?? ''} />;
 
@@ -39,13 +60,26 @@ export function App() {
       <Stage backend={cap.backend} />
       <LoadingVeil />
       <Masthead />
-      <StatusPill
-        state={timeRate !== 0 ? { label: 'SIMULATION · RUNNING', tone: 'running' } : { label: 'SIMULATION · PAUSED', tone: 'paused' }}
-      />
+      <Picker />
+      {ready && !bench && <Glyphs />}
+      <SystemPill />
       <DebugOverlay />
       <BenchPanel />
       <StatsRow />
       <TimeScrubber />
+      {ready && !bench && (
+        <>
+          <Toolbar />
+          <SpecimenPanel />
+          <Inspector />
+          <Recommendations />
+          <Toast />
+          <Notes />
+          <AgentFeed />
+          <Governance />
+          <AuditLog />
+        </>
+      )}
       <DataBadge />
     </div>
   );

@@ -1,5 +1,7 @@
 /// <reference lib="webworker" />
 import { Engine } from './engine';
+import { AgentEngine } from '@/agents/engine';
+import { RULESET_VERSION, ruleSetHash } from '@/agents/rules';
 import { scenarios } from './scenarios';
 import type { FromWorker, ModelMeta, SimInputs, ToWorker } from './protocol';
 import type { NetworkBundle } from './types';
@@ -10,6 +12,7 @@ import type { NetworkBundle } from './types';
  * inputs always give the same result.
  */
 let engine: Engine | null = null;
+let agentEngine: AgentEngine | null = null;
 const post = (m: FromWorker, transfer: Transferable[] = []) => (self as DedicatedWorkerGlobalScope).postMessage(m, transfer);
 
 function run(inputs: SimInputs) {
@@ -23,15 +26,40 @@ function run(inputs: SimInputs) {
     const idx = m.busIndex.get(busId);
     if (idx !== undefined && mw) extra[idx] = mw;
   }
-  const day = engine.runDay({
+  const idx = (id: string) => m.branches.findIndex((b) => b.id === id);
+  const engineInputs = {
     date: sc.date,
     year: inputs.year ?? sc.year,
     wind: { reference: sc.windRef, front: sc.front, seed: sc.seed, scale: inputs.windScale },
     icShare: inputs.icShare ?? sc.icShare,
     extraLoad: extra,
     outages,
+    timedOutages: inputs.timedOutages.map((t) => ({ branch: idx(t.id), fromStep: Math.round(t.fromHour * 4) })).filter((t) => t.branch >= 0),
+    adjustments: inputs.adjustments
+      .map((a) => ({ bus: m.busIndex.get(a.bus) ?? -1, deltaMW: a.deltaMW, fromStep: Math.round(a.fromHour * 4), windCluster: a.windCluster }))
+      .filter((a) => a.bus >= 0),
     unitOutages: [],
-  });
+  };
+  const day = engine.runDay(engineInputs);
+  const tripSteps: Record<string, number> = {};
+  for (const t of inputs.timedOutages) tripSteps[t.id] = Math.round(t.fromHour * 4);
+  const winter = sc.date.m >= 11 || sc.date.m <= 3;
+  const agentDay = agentEngine!.run(
+    day,
+    {
+      scenarioWind: engineInputs.wind,
+      ambientC: winter ? 7 : 13,
+      humidityPct: sc.front ? 95 : 82,
+      commsLostFromStep: inputs.commsLostFromHour === null ? null : Math.round(inputs.commsLostFromHour * 4),
+      stalePolicy: inputs.stalePolicy,
+      tripSteps,
+    },
+    engineInputs.icShare,
+    (s) => engine!.outagesAt(engineInputs, s),
+    { year: engineInputs.year },
+  );
+  const { agents: _agentList, ...agents } = agentDay;
+  void _agentList;
   const buffers = [
     day.flows.buffer,
     day.loading.buffer,
@@ -44,7 +72,8 @@ function run(inputs: SimInputs) {
     day.windSpeed.buffer,
     ...Object.values(day.series).map((a) => a.buffer),
   ] as ArrayBuffer[];
-  post({ type: 'day', day, inputs, ms: performance.now() - t0 }, buffers);
+  buffers.push(agents.level.buffer as ArrayBuffer, agents.levelBase.buffer as ArrayBuffer, agents.confidence.buffer as ArrayBuffer);
+  post({ type: 'day', day, agents, inputs, ms: performance.now() - t0 }, buffers);
 }
 
 self.onmessage = async (ev: MessageEvent<ToWorker>) => {
@@ -59,6 +88,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       };
       const [network, allocation, plants] = await Promise.all([get('network.json'), get('allocation.json'), get('plants.json')]);
       engine = new Engine({ network, allocation, plants } as NetworkBundle);
+      agentEngine = new AgentEngine(engine);
       const m = engine.model;
       const meta: ModelMeta = {
         branches: m.branches.map((b) => {
@@ -80,6 +110,9 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
         units: m.units.map((u) => ({ id: u.spec.id, name: u.spec.name, bus: m.buses[u.bus]!.id, capacity: u.capacity })),
         wind: m.wind.map((w) => ({ bus: m.buses[w.bus]!.id, name: w.name, e: w.e, n: w.n })),
         contingencyLabels: m.branches.map((_, k) => engine!.contingencyLabel(k)),
+        agents: agentEngine.agents,
+        ruleSetVersion: RULESET_VERSION,
+        ruleSetHash: ruleSetHash(),
       };
       post({ type: 'ready', meta, ms: performance.now() - t0 });
       run(msg.inputs);

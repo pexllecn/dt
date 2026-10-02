@@ -183,4 +183,54 @@ export const branchOverrides: BranchOverride[] = [
     circuits: 2,
     note: 'Assumption: as above',
   },
+  {
+    match: 'Irishtown to Shellybanks 220 kV',
+    circuits: 2,
+    note: 'Assumption: Poolbeg 220 kV is a meshed station; the map data shows one cable between its two halves',
+  },
+];
+
+/**
+ * Underground cables known from public network maps but missing from the map data. Without them
+ * the Poolbeg peninsula (Dublin Bay generation) would export only through the Ringsend 110 kV
+ * cables. Route lengths are approximate and the cables are not drawn.
+ */
+export interface AddedCable {
+  id: string;
+  from: string;
+  to: string;
+  kv: number;
+  circuits: number;
+  lengthKm: number;
+  note: string;
+}
+
+export const addedCables: AddedCable[] = [
+  {
+    id: 'X-POOLBEG-INCHICORE',
+    from: 'Shellybanks',
+    to: 'Inchicore',
+    kv: 220,
+    circuits: 2,
+    lengthKm: 8.5,
+    note: 'Assumption: Poolbeg to Inchicore 220 kV cables (public network map); not in OpenStreetMap',
+  },
+  {
+    id: 'X-POOLBEG-CARRICKMINES',
+    from: 'Shellybanks',
+    to: 'Carrickmines',
+    kv: 220,
+    circuits: 1,
+    lengthKm: 11,
+    note: 'Assumption: Poolbeg to Carrickmines 220 kV cable (public network map); not in OpenStreetMap',
+  },
+  {
+    id: 'X-POOLBEG-FINGLAS',
+    from: 'Shellybanks',
+    to: 'Finglas',
+    kv: 220,
+    circuits: 1,
+    lengthKm: 10.5,
+    note: 'Assumption: Poolbeg to Finglas 220 kV cable via North Wall (public network map); not in OpenStreetMap',
+  },
 ];

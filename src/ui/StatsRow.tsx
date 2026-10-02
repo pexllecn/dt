@@ -25,6 +25,7 @@ export function StatsRow() {
   const demand = sampleSeries(se.demand, h);
   const wind = sampleSeries(se.wind, h);
   const curtailed = sampleSeries(se.curtailed, h);
+  const constrained = sampleSeries(se.constrained, h);
   const snsp = sampleSeries(se.snsp, h);
   const dcShare = sampleSeries(se.dcShare, h);
   const stats: Stat[] = [
@@ -34,7 +35,7 @@ export function StatsRow() {
       value: (wind / 1000).toFixed(2),
       unit: 'GW',
       source: 'Synthetic',
-      note: curtailed > 1 ? `${Math.round(curtailed)} MW curtailed` : 'none curtailed',
+      note: [curtailed > 1 ? `${Math.round(curtailed)} MW curtailed` : 'none curtailed', constrained > 1 ? `${Math.round(constrained)} MW moved for constraints` : ''].filter(Boolean).join(', '),
     },
     { label: 'SNSP', value: (snsp * 100).toFixed(0), unit: '%', source: 'Synthetic', note: 'cap 75% (assumption)' },
     { label: 'Data centre share', value: (dcShare * 100).toFixed(0), unit: '%', source: 'Synthetic', note: 'of ROI demand now' },

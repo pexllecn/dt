@@ -1,19 +1,35 @@
 import { create } from 'zustand';
 import type { DayResult } from './engine';
+import type { AgentDay } from '@/agents/engine';
 import type { FromWorker, ModelMeta, SimInputs, ToWorker } from './protocol';
+import { scenarios, type ScenarioId } from './scenarios';
 
 export interface SimState {
   meta: ModelMeta | null;
   day: DayResult | null;
+  agents: Omit<AgentDay, 'agents'> | null;
   inputs: SimInputs;
   computeMs: number;
   error: string | null;
   setInputs(patch: Partial<SimInputs>): void;
   trip(branchId: string): void;
   restore(branchId: string): void;
+  /** Switch scenario: clears user changes and applies the scenario's scripted events. */
+  applyScenario(id: ScenarioId): void;
 }
 
-const defaults: SimInputs = { scenario: 'today', windScale: 1, year: null, icShare: null, extraLoad: {}, outages: [] };
+const defaults: SimInputs = {
+  scenario: 'today',
+  windScale: 1,
+  year: null,
+  icShare: null,
+  extraLoad: {},
+  outages: [],
+  timedOutages: [],
+  adjustments: [],
+  commsLostFromHour: null,
+  stalePolicy: 'consistency',
+};
 
 let worker: Worker | null = null;
 const send = (m: ToWorker) => worker?.postMessage(m);
@@ -21,6 +37,7 @@ const send = (m: ToWorker) => worker?.postMessage(m);
 export const useSim = create<SimState>((set, get) => ({
   meta: null,
   day: null,
+  agents: null,
   inputs: defaults,
   computeMs: 0,
   error: null,
@@ -36,6 +53,25 @@ export const useSim = create<SimState>((set, get) => ({
   restore(id) {
     get().setInputs({ outages: get().inputs.outages.filter((o) => o !== id) });
   },
+  applyScenario(id) {
+    const meta = get().meta;
+    const ev = scenarios[id].events;
+    const timedOutages = (ev?.trips ?? []).flatMap((t) => {
+      const b = meta?.branches.find((x) => x.label === t.label);
+      return b ? [{ id: b.id, fromHour: t.hour }] : [];
+    });
+    get().setInputs({
+      scenario: id,
+      windScale: 1,
+      year: null,
+      icShare: null,
+      extraLoad: {},
+      outages: [],
+      timedOutages,
+      adjustments: [],
+      commsLostFromHour: ev?.commsLostHour ?? null,
+    });
+  },
 }));
 
 /** Start the simulation worker once. */
@@ -44,8 +80,16 @@ export function startSimulation(): void {
   worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
   worker.onmessage = (ev: MessageEvent<FromWorker>) => {
     const m = ev.data;
-    if (m.type === 'ready') useSim.setState({ meta: m.meta });
-    else if (m.type === 'day') useSim.setState({ day: m.day, computeMs: m.ms });
+    if (m.type === 'ready') {
+      useSim.setState({ meta: m.meta });
+      // Deep links for rehearsal and screenshots: ?scenario=storm&policy=availability
+      const q = new URLSearchParams(location.search);
+      const sc = q.get('scenario');
+      if (sc && sc in scenarios) useSim.getState().applyScenario(sc as ScenarioId);
+      const policy = q.get('policy');
+      if (policy === 'availability' || policy === 'consistency') useSim.getState().setInputs({ stalePolicy: policy });
+    }
+    else if (m.type === 'day') useSim.setState({ day: m.day, agents: m.agents, computeMs: m.ms });
     else if (m.type === 'error') {
       console.error('simulation:', m.message);
       useSim.setState({ error: m.message });
