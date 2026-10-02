@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three/webgpu';
 import {
-  emissive, float, mix, mrt, output, pass, saturation, screenUV, uniform, vec3, vec4, velocity,
+  emissive, float, materialOpacity, mix, mrt, output, pass, renderOutput, saturation, screenUV, uniform, vec3, vec4, velocity,
 } from 'three/tsl';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
@@ -19,6 +19,8 @@ import { createSky, type SkyRig, type Theme } from './sky.ts';
 import { buildStation, type StationScene } from './station.ts';
 import { buildSurroundings, type Surroundings } from './surroundings.ts';
 import { FlowLayer } from './flow.ts';
+import { FoldLayer } from './fold.ts';
+import { SCHEM_CENTRE, SCHEM_EXTENT } from './schematic.ts';
 import { buildYard, terrainHeight } from './yard.ts';
 
 CameraControls.install({
@@ -30,6 +32,9 @@ CameraControls.install({
 
 export type Tier = 'high' | 'medium' | 'low';
 export type Lens = 'physical' | 'flow' | 'circuit';
+
+interface Pose { pos: THREE.Vector3; target: THREE.Vector3; fov: number }
+const ease = (x: number) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
 
 /** The flow path whose direction a component's label arrow follows. */
 const ARROW_KEY: Partial<Record<ComponentId, string>> = {
@@ -71,6 +76,15 @@ export class Stage {
   station!: StationScene;
   surroundings!: Surroundings;
   flow!: FlowLayer;
+  fold!: FoldLayer;
+  /** Fades the physical scene during the fold (dithered alpha, no sorting artefacts). */
+  private sceneFade = uniform(1);
+  private circuitU = uniform(0);
+  private physPose: Pose | null = null;
+  private moveStart: { pose: Pose; p: number; target: 0 | 1 } | null = null;
+  private conductorMeshes: THREE.Object3D[] = [];
+  private ringPhys = new THREE.Vector3();
+  private terrain: THREE.Object3D[] = [];
   lens: Lens = 'physical';
   private flowDim = uniform(0);
   private arrowRuns = new Map<string, { pts: THREE.Vector3[] }>();
@@ -138,6 +152,22 @@ export class Stage {
     for (const [id, b] of this.surroundings.bounds) this.bounds.set(id, b);
     this.flow = new FlowLayer([...this.station.paths, ...this.surroundings.paths]);
     this.scene.add(this.flow.group);
+    this.fold = new FoldLayer(this.station.paths);
+    this.scene.add(this.fold.group);
+    // Every physical material can dissolve during the fold.
+    this.terrain = yard.group.children.filter((o) => (o as THREE.Mesh).material === this.materials.grass);
+    const seen = new Set<THREE.Material>();
+    for (const root of [yard.group, this.station.group, this.surroundings.group]) root.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      if (o.userData.matKey === 'conductor') this.conductorMeshes.push(o);
+      for (const mat of (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as THREE.NodeMaterial[]) {
+        if (seen.has(mat) || mat === this.materials.grass) continue;
+        seen.add(mat);
+        if (mat.transparent) mat.opacityNode = materialOpacity.mul(this.sceneFade);
+        else { mat.alphaHash = true; mat.opacityNode = this.sceneFade; }
+      }
+    });
     this.scene.fog = new THREE.FogExp2(0xc9d3dc, 0.00007);
 
     // A copy of the sky for baking the environment map.
@@ -194,9 +224,12 @@ export class Stage {
     const beauty = vec4(rgb, 1);
     // TRAA is opt-in (?aa=traa) until verified on a GPU: under software rendering it produced uniform frames.
     const useTraa = new URLSearchParams(location.search).get('aa') === 'traa';
-    pipeline.outputNode = useTraa
+    const aa = useTraa
       ? traa(beauty, depth, scenePass.getTextureNode('velocity'), this.camera)
       : smaa(beauty);
+    // The Circuit lens shows the diagram's exact colours: no tone mapping once the fold has resolved.
+    pipeline.outputColorTransform = false;
+    pipeline.outputNode = mix(renderOutput(aa, THREE.AgXToneMapping, THREE.SRGBColorSpace), renderOutput(aa, THREE.NoToneMapping, THREE.SRGBColorSpace), this.circuitU);
     this.pipeline = pipeline;
   }
 
@@ -206,6 +239,7 @@ export class Stage {
     this.theme = theme;
     this.grade.value = theme === 'control' ? 1 : 0;
     if (this.flow && this.lens === 'flow') this.applyLens();
+    this.fold?.setTheme(theme);
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.set(theme === 'control' ? 0x1a2230 : 0xc9d3dc);
     fog.density = theme === 'control' ? 0.00011 : 0.00007;
@@ -213,17 +247,62 @@ export class Stage {
   }
 
   setLens(lens: Lens): void {
-    if (lens === 'circuit') lens = 'physical';
     if (lens === this.lens) return;
     this.lens = lens;
+    const target = lens === 'circuit' ? 1 : 0;
+    if (target !== this.fold.controller.target) {
+      if (target === 1 && this.fold.controller.p === 0) this.physPose = this.currentPose();
+      this.moveStart = { pose: this.currentPose(), p: this.fold.controller.p, target };
+      this.fold.controller.target = target;
+    }
     this.applyLens();
   }
 
   private applyLens(): void {
-    const on = this.lens === 'flow';
+    // The Flow lens waits until the station has unfolded.
+    const on = this.lens === 'flow' && this.fold.controller.p === 0;
     this.flow.setActive(false, [], false);
     if (on) this.flow.setActive(true, [this.station.group, this.surroundings.group], this.theme === 'control');
     this.flowDim.value = on ? 1 : 0;
+  }
+
+  /** Fold progress, 0 (Physical) to 1 (Circuit). */
+  foldP(): number { return this.fold.controller.p; }
+
+  private currentPose(): Pose {
+    return { pos: this.camera.position.clone(), target: this.controls.getTarget(new THREE.Vector3()), fov: this.camera.fov };
+  }
+
+  /** The top-down, near-orthographic view that frames the whole diagram. */
+  private schemPose(): Pose {
+    const fov = 12;
+    const half = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+    const h = Math.max(SCHEM_EXTENT[1] / 2 / half, SCHEM_EXTENT[0] / 2 / half / Math.max(0.5, this.camera.aspect));
+    const [x, z] = SCHEM_CENTRE;
+    return { pos: new THREE.Vector3(x, h, z + h * 0.002), target: new THREE.Vector3(x, 0, z), fov };
+  }
+
+  private applyFoldCamera(): void {
+    const c = this.fold.controller;
+    const m = this.moveStart;
+    if (!m) return;
+    const e = (p: number) => ease(p / 0.8);
+    let from: Pose, to: Pose, k: number;
+    if (m.target === 1) {
+      from = m.pose; to = this.schemPose();
+      k = (e(c.p) - e(m.p)) / Math.max(1e-6, 1 - e(m.p));
+    } else {
+      from = this.physPose ?? m.pose; to = m.pose;
+      k = e(m.p) > 0 ? e(c.p) / e(m.p) : 0;
+    }
+    k = Math.min(1, Math.max(0, k));
+    const pos = from.pos.clone().lerp(to.pos, k);
+    const tgt = from.target.clone().lerp(to.target, k);
+    // Rise in an arc rather than a straight line, so the move reads as lifting off.
+    pos.y += Math.sin(k * Math.PI) * 0.15 * from.pos.distanceTo(to.pos) * (m.target === 1 ? 1 : 0.6);
+    this.camera.fov = from.fov + (to.fov - from.fov) * k;
+    this.camera.updateProjectionMatrix();
+    void this.controls.setLookAt(pos.x, pos.y, pos.z, tgt.x, tgt.y, tgt.z, false);
   }
 
   /** Screen-space angle (radians, 0 = right, clockwise) of the flow at a component's label, or null when nothing flows. */
@@ -306,7 +385,7 @@ export class Stage {
     const rect = this.opts.canvas.getBoundingClientRect();
     const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
-    const hits = this.raycaster.intersectObjects(this.pickables, false);
+    const hits = this.raycaster.intersectObjects(this.foldP() > 0.5 ? this.fold.pickables : this.pickables, false);
     for (const h of hits) {
       const owner = h.object.userData.owner as ComponentId | undefined;
       if (owner) return owner;
@@ -327,11 +406,22 @@ export class Stage {
     const r = isTx ? 11 : this.surroundings.bounds.has(id) ? Math.max(s.x, s.z) * 0.62 : THREE.MathUtils.clamp(Math.min(s.x, s.z) * 0.6, 5, 22);
     ring.scale.set(r, 1, r);
     ring.position.set(c.x, 0.15, c.z);
+    this.ringPhys.copy(ring.position);
     ring.visible = true;
   }
 
   /** Fly to a framed view of a component. */
   flyTo(id: ComponentId, close = false): void {
+    if (this.foldP() > 0) {
+      if (this.foldP() < 1) return;
+      const b = this.fold.bounds.get(id);
+      if (!b) return;
+      const c = b.getCenter(new THREE.Vector3());
+      const d = this.camera.position.y;
+      const h = close ? Math.min(d, 700) : d;
+      void this.controls.setLookAt(c.x, h, c.z + h * 0.002, c.x, 0, c.z, true);
+      return;
+    }
     const box = this.bounds.get(id);
     if (!box) return;
     const c = box.getCenter(new THREE.Vector3());
@@ -360,8 +450,9 @@ export class Stage {
     const v = new THREE.Vector3();
     const far = this.isNetworkScale();
     for (const id of ids) {
-      const a = (far ? this.surroundings.farAnchors.get(id) : null) ?? this.station.anchors.get(id);
-      if (!a) continue;
+      const phys = (far ? this.surroundings.farAnchors.get(id) : null) ?? this.station.anchors.get(id);
+      if (!phys) continue;
+      const a = this.foldAnchor(id, phys);
       v.copy(a).project(this.camera);
       const distance = this.camera.position.distanceTo(a);
       out.push({ id, x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height, visible: v.z > -1 && v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1, distance });
@@ -369,8 +460,18 @@ export class Stage {
     return out;
   }
 
+  /** A label anchor part-way through the fold: it travels with its bay to the diagram. */
+  private foldAnchor(id: ComponentId, phys: THREE.Vector3): THREE.Vector3 {
+    const p = this.foldP();
+    if (p === 0) return phys;
+    const s = this.fold.anchors.get(id);
+    if (!s) return phys;
+    return phys.clone().lerp(s, ease((p - 0.2) / 0.7));
+  }
+
   /** True when the camera is out at network scale, so labels move to the plant they name. */
   isNetworkScale(): boolean {
+    if (this.foldP() > 0) return false;
     const [x, , z] = YARD_CENTRE;
     return Math.hypot(this.camera.position.x - x, this.camera.position.y, this.camera.position.z - z) > 1100;
   }
@@ -380,6 +481,40 @@ export class Stage {
     const rect = this.opts.canvas.getBoundingClientRect();
     const v = p.clone().project(this.camera);
     return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height, visible: v.z > -1 && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05, distance: this.camera.position.distanceTo(p) };
+  }
+
+  private updateFold(wasMoving: boolean): void {
+    const c = this.fold.controller;
+    const p = c.p;
+    if (wasMoving || c.moving) this.applyFoldCamera();
+    const d = c.dissolve();
+    this.sceneFade.value = 1 - d;
+    // The diagram's exact colours as soon as the paper is down (tone mapping off).
+    this.circuitU.value = ease((p - 0.08) / 0.22);
+    this.grade.value = (this.theme === 'control' ? 1 : 0) * (1 - d);
+    this.aoStrength.value = 0.85 * (1 - d);
+    for (const o of this.conductorMeshes) o.visible = p === 0;
+    this.surroundings.group.visible = d < 1;
+    this.sky.sky.visible = d < 1;
+    for (const t of this.terrain) t.visible = d < 1;
+    // Circuit: pan and zoom only, looking straight down.
+    const settled = p === 1;
+    this.controls.maxPolarAngle = settled ? 0.01 : Math.PI * 0.48;
+    this.controls.mouseButtons.left = settled ? CameraControls.ACTION.TRUCK : CameraControls.ACTION.ROTATE;
+    this.controls.touches.one = settled ? CameraControls.ACTION.TOUCH_TRUCK : CameraControls.ACTION.TOUCH_ROTATE;
+    if (!c.moving && p === 0 && this.moveStart) {
+      this.moveStart = null;
+      this.camera.fov = this.physPose?.fov ?? 38;
+      this.camera.updateProjectionMatrix();
+      if (this.lens === 'flow' && !this.flow.active) this.applyLens();
+    }
+    // The selection ring travels with its bay.
+    if (this.selected && this.selectionRing?.visible) {
+      const b = this.fold.bounds.get(this.selected);
+      const target = b ? b.getCenter(new THREE.Vector3()).setY(0.15) : this.ringPhys;
+      this.selectionRing.position.copy(this.ringPhys).lerp(target, ease((p - 0.2) / 0.7));
+      if (p > 0.5) this.selectionRing.position.y = 2.2;
+    }
   }
 
   getStats(): StageStats {
@@ -414,11 +549,16 @@ export class Stage {
 
   /** Render one frame with a fixed step (capture mode). */
   async renderFrames(n: number, dt = 1 / 30): Promise<void> {
-    for (let i = 0; i < n; i++) this.frame(dt);
+    // Advance every frame, but draw only the last few: software rendering is slow, and the
+    // animation state does not depend on drawing. Then wait for the GPU to finish.
+    for (let i = 0; i < n; i++) this.frame(dt, i >= n - 3);
+    const gl = (this.renderer as unknown as { backend: { gl?: WebGL2RenderingContext } }).backend.gl;
+    gl?.finish();
     await new Promise((r) => requestAnimationFrame(() => r(null)));
+    gl?.finish();
   }
 
-  private frame(fixed?: number): void {
+  private frame(fixed?: number, draw = true): void {
     this.clock.update();
     const dt = fixed ?? Math.min(0.1, this.clock.getDelta());
     this.time += dt;
@@ -433,18 +573,24 @@ export class Stage {
       const viewDist = this.camera.position.distanceTo(this.controls.getTarget(new THREE.Vector3()));
       this.flow.setViewDistance(viewDist);
       this.materials.widen.value = Math.max(0, viewDist * 0.00045 - 0.15);
+      this.fold.widen.value = Math.max(0, viewDist * 0.0011 - 0.07);
       // Keep depth precision where the camera is looking: the near plane follows the viewing distance.
       const near = THREE.MathUtils.clamp(viewDist * 0.002, 0.8, 12);
       if (Math.abs(near - this.camera.near) > 0.05) { this.camera.near = near; this.camera.updateProjectionMatrix(); }
       this.flow.update(this.state, dt);
+      const wasMoving = this.fold.controller.moving;
+      this.fold.update(this.state, dt);
+      this.updateFold(wasMoving);
     }
     if (this.needsEnv) { this.bakeEnvironment(); this.needsEnv = false; }
     if (this.selectionRing?.visible) {
       const m = this.selectionRing.material as THREE.MeshBasicNodeMaterial;
       m.opacity = 0.45 + 0.2 * Math.sin(this.time * 3);
     }
-    if (this.pipeline) this.pipeline.render();
-    else this.renderer.render(this.scene, this.camera);
+    if (draw) {
+      if (this.pipeline) this.pipeline.render();
+      else this.renderer.render(this.scene, this.camera);
+    }
     this.onFrame?.(this);
     const info = this.renderer.info.render;
     this.stats.drawCalls = info.drawCalls;

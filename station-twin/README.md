@@ -6,7 +6,7 @@ This folder is self-contained and separate from the national twin work elsewhere
 
 ## Status
 
-Milestones 2 (simulation), 3 (station in 3D) and 4 (surroundings and the Flow lens) are complete. See [docs/PLAN.md](docs/PLAN.md) for the plan and [docs/milestones/M4.md](docs/milestones/M4.md) for the latest report.
+Milestones 2 to 5 are complete: simulation, station in 3D, surroundings and the Flow lens, and the Circuit lens with the fold. See [docs/PLAN.md](docs/PLAN.md) for the plan and [docs/milestones/M5.md](docs/milestones/M5.md) for the latest report.
 
 ## Commands
 
@@ -30,6 +30,6 @@ Milestones 2 (simulation), 3 (station in 3D) and 4 (surroundings and the Flow le
 - `tests`: parity with the prototype, unit tests, scenario claims, the `file://` check.
 - `reference`: the original prototype, used only for parity fixtures.
 
-Milestone 3 (station in 3D) report: [docs/milestones/M3.md](docs/milestones/M3.md). Milestone 4 (surroundings and the Flow lens) report: [docs/milestones/M4.md](docs/milestones/M4.md).
+Milestone 3 (station in 3D) report: [docs/milestones/M3.md](docs/milestones/M3.md). Milestone 4 (surroundings and the Flow lens) report: [docs/milestones/M4.md](docs/milestones/M4.md). Milestone 5 (Circuit lens and the fold): [docs/milestones/M5.md](docs/milestones/M5.md).
 
 Useful query parameters for review: `?console` (simulation console), `?theme=control`, `?tier=high|medium|low`, `?backend=webgl|webgpu`, `?aa=traa`.

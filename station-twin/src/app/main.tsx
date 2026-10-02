@@ -2,7 +2,7 @@
  * The 3D station application: a full-bleed stage with UI floating over it.
  * Query parameters (for capture and review): capture, backend=webgl|webgpu, tier=high|medium|low,
  * ops=operate:ID:device:action|gen:ID:MW|demand:ID:MW|battery:MW|advance:S (comma separated),
- * theme=control, lens=flow, time=HH:MM, scenario=a,b, select=ID, view=tx,ty,tz,fx,fy,fz, frames=N.
+ * theme=control, lens=flow|circuit, then=LENS, thenFrames=N, time=HH:MM, scenario=a,b, select=ID, view=tx,ty,tz,fx,fy,fz, frames=N.
  */
 import '../ui/theme.css';
 import { effect } from '@preact/signals';
@@ -134,6 +134,7 @@ async function boot(): Promise<void> {
       case ' ': e.preventDefault(); client.setClock({ paused: !clock.value.paused }); break;
       case '1': lens.value = 'physical'; break;
       case '2': lens.value = 'flow'; break;
+      case '3': lens.value = 'circuit'; break;
       case 's': case 'S': dockOpen.value = !dockOpen.value; break;
       case 't': case 'T': theme.value = theme.value === 'daylight' ? 'control' : 'daylight'; break;
       case 'd': case 'D': debugOpen.value = !debugOpen.value; break;
@@ -146,7 +147,8 @@ async function boot(): Promise<void> {
   });
 
   if (params.get('theme') === 'control') theme.value = 'control';
-  if (params.get('lens') === 'flow') lens.value = 'flow';
+  const lensParam = params.get('lens');
+  if (lensParam === 'flow' || lensParam === 'circuit') lens.value = lensParam;
   const sel = params.get('select') as ComponentId | null;
   if (sel) selected.value = sel;
   if (params.has('dock') && params.get('dock') === '0') dockOpen.value = false;
@@ -163,6 +165,13 @@ async function boot(): Promise<void> {
     // Let the UI settle (panels open or closed) before the frames that place labels.
     await new Promise((r) => setTimeout(r, 60));
     await stage.renderFrames(Number(params.get('frames') ?? 16), Number(params.get('dt') ?? 1 / 30));
+    // Then switch lens and render more frames (for captures part-way through a fold back).
+    const then = params.get('then');
+    if (then === 'physical' || then === 'flow' || then === 'circuit') {
+      lens.value = then;
+      await new Promise((r) => setTimeout(r, 30));
+      await stage.renderFrames(Number(params.get('thenFrames') ?? 16), Number(params.get('dt') ?? 1 / 30));
+    }
     (window as unknown as { __stats: unknown; __stage: unknown }).__stats = stage.getStats();
     (window as unknown as { __stage: unknown }).__stage = stage;
     document.body.dataset.ready = '1';

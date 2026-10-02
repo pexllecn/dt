@@ -64,7 +64,7 @@ export function TopStrip({ client }: { client: SimClient }) {
       <div class="lenses" role="tablist" aria-label="Lens">
         <button class={lens.value === 'physical' ? 'on' : ''} role="tab" aria-selected={lens.value === 'physical'} title="Physical (1)" onClick={() => (lens.value = 'physical')}>Physical</button>
         <button class={lens.value === 'flow' ? 'on' : ''} role="tab" aria-selected={lens.value === 'flow'} title="Flow: power flow, loading and thermography (2)" onClick={() => (lens.value = 'flow')}>Flow</button>
-        <button role="tab" disabled title="Circuit lens arrives in milestone 5">Circuit</button>
+        <button class={lens.value === 'circuit' ? 'on' : ''} role="tab" aria-selected={lens.value === 'circuit'} title="Circuit: the single-line diagram (3)" onClick={() => (lens.value = 'circuit')}>Circuit</button>
       </div>
       <button class="iconbtn" title="Method and assumptions (M)" aria-label="Method and assumptions" onClick={() => (methodOpen.value = true)}><Icon name="info" /></button>
       <button class={`iconbtn ${theme.value === 'control' ? 'on' : ''}`} style={{ marginLeft: '6px' }} title="Theme: Daylight or Control Room (T)" aria-label="Toggle theme" onClick={() => (theme.value = theme.value === 'daylight' ? 'control' : 'daylight')}>
