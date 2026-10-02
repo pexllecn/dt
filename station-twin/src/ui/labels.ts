@@ -54,7 +54,7 @@ export function attachLabels(stage: Stage, layer: HTMLElement, getState: () => S
     const sel = getSelected();
     const projected = stage.project(PRIORITY);
     const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
-    for (const sel2 of ['.top', '.dock:not(.closed)', '.insp', '.log', '.badge', '.toast']) {
+    for (const sel2 of ['.top', '.dock:not(.closed)', '.insp', '.feed', '.rec', '.badge', '.toast', '.legend']) {
       const el = document.querySelector(sel2);
       if (el) { const r = el.getBoundingClientRect(); placed.push({ x0: r.left, x1: r.right, y0: r.top, y1: r.bottom }); }
     }

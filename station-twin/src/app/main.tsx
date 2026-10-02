@@ -2,21 +2,25 @@
  * The 3D station application: a full-bleed stage with UI floating over it.
  * Query parameters (for capture and review): capture, backend=webgl|webgpu, tier=high|medium|low,
  * ops=operate:ID:device:action|gen:ID:MW|demand:ID:MW|battery:MW|advance:S (comma separated),
+ * ops also: approve:N (approve option N of the pending recommendation); preview=N; audit; rules=base;
  * theme=control, lens=flow|circuit, then=LENS, thenFrames=N, time=HH:MM, scenario=a,b, select=ID, view=tx,ty,tz,fx,fy,fz, frames=N.
  */
 import '../ui/theme.css';
+import { SITE } from '../config/assumptions.ts';
+import { clockLabel } from '../lib/format.ts';
 import { effect } from '@preact/signals';
 import { render } from 'preact';
-import { Engine } from '../sim/engine.ts';
+import { Twin } from '../agents/twin.ts';
 import type { ComponentId } from '../sim/types.ts';
 import { Stage, type Tier } from '../scene/stage.ts';
 import { attachLabels } from '../ui/labels.ts';
 import { Dock } from '../ui/Dock.tsx';
 import { Inspector } from '../ui/Inspector.tsx';
-import { Badge, Confirm, Debug, DockToggle, FlowLegend, Keys, Log, Method, Toast } from '../ui/Overlays.tsx';
+import { Badge, Confirm, Debug, DockToggle, FlowLegend, Keys, Method, Toast } from '../ui/Overlays.tsx';
+import { AuditPanel, clientRef, Feed, RecommendationCard } from '../ui/Agents.tsx';
 import { TopStrip } from '../ui/TopStrip.tsx';
 import { localClient, workerClient, type SimClient } from './client.ts';
-import { clock, confirmReq, debugOpen, dockOpen, lens, methodOpen, selected, snap, theme, toast } from './store.ts';
+import { agents, auditOpen, clock, confirmReq, debugOpen, dockOpen, hovered, lens, methodOpen, previews, selected, snap, theme, toast } from './store.ts';
 
 const params = new URLSearchParams(location.search);
 const capture = params.has('capture');
@@ -30,7 +34,9 @@ function App({ client, stage }: { client: SimClient; stage: Stage }) {
       <DockToggle />
       <Inspector client={client} onFrame={(id) => stage.flyTo(id, true)} />
       <Toast />
-      <Log />
+      <Feed onFly={(id) => { selected.value = id; stage.flyTo(id); }} />
+      <RecommendationCard />
+      <AuditPanel />
       <Badge />
       <FlowLegend />
       {!capture && <Keys />}
@@ -61,7 +67,9 @@ async function boot(): Promise<void> {
   // Simulation: worker for live use, main-thread engine for deterministic capture.
   let client: SimClient;
   if (capture) {
-    const engine = new Engine();
+    const engine = new Twin();
+    engine.wall = () => '2026-03-10T12:00:00.000Z';
+    if (params.get('rules') === 'base') engine.decide({ type: 'ruleset', mode: 'base' });
     for (const s of (params.get('scenario') ?? '').split(',').filter(Boolean)) engine.command({ type: 'scenario', id: s as never });
     const time = params.get('time');
     if (time) { const [h, m] = time.split(':').map(Number); engine.runUntil((h! * 60 + (m ?? 0)) * 60); }
@@ -72,6 +80,7 @@ async function boot(): Promise<void> {
       if (kind === 'demand') engine.command({ type: 'setDemand', id: id as 'LD_TOWN', mw: Number(device) });
       if (kind === 'battery') engine.command({ type: 'setBattery', mw: Number(id) });
       if (kind === 'advance') engine.advance(Number(id));
+      if (kind === 'approve') { const r = engine.view().recommendations.find((x) => x.status === 'pending'); const o = r?.options[Number(id) - 1]; if (r && o) engine.decide({ type: 'approve', recId: r.id, optionId: o.id, operator: 'Duty engineer' }); }
     }
     client = localClient(engine);
     clock.value = { ...clock.value, paused: true };
@@ -94,13 +103,29 @@ async function boot(): Promise<void> {
   leaderLine.setAttribute('opacity', '0.55');
   leader.appendChild(leaderLine);
   ui.appendChild(leader);
+  const predBanner = document.createElement('div');
+  predBanner.className = 'predbanner panel';
+  predBanner.style.display = 'none';
+  ui.appendChild(predBanner);
   const appRoot = document.createElement('div');
   appRoot.style.display = 'contents';
   ui.appendChild(appRoot);
+  clientRef.current = client;
   render(<App client={client} stage={stage} />, appRoot);
 
   // Signals to the stage.
   effect(() => { const s = snap.value; if (s) stage.setState(s); });
+  effect(() => { stage.agentView = agents.value; });
+  // Ghost preview: hovering an option shows its predicted end state in the scene.
+  effect(() => {
+    const h = hovered.value;
+    const p = previews.value;
+    const st = h && p.forRec === h.recId ? p.states[h.optionId] ?? null : null;
+    stage.setPreview(st);
+    labelLayer.classList.toggle('pred', !!st);
+    predBanner.style.display = st ? '' : 'none';
+    if (st) predBanner.textContent = `Preview: predicted state at ${clockLabel(SITE.epochUtcMs.value, st.t).slice(-5)} if this option is approved`;
+  });
   effect(() => { document.documentElement.dataset.theme = theme.value; stage.setTheme(theme.value); leader.style.color = theme.value === 'control' ? '#e8ecf1' : '#14181d'; });
   effect(() => stage.select(selected.value));
   effect(() => { stage.setLens(lens.value); document.documentElement.dataset.lens = lens.value; });
@@ -109,7 +134,7 @@ async function boot(): Promise<void> {
     if (id) stage.flyTo(id);
   };
 
-  const updateLabels = attachLabels(stage, labelLayer, () => snap.value, () => selected.value, (id) => { selected.value = id; stage.flyTo(id); });
+  const updateLabels = attachLabels(stage, labelLayer, () => stage.preview ?? snap.value, () => selected.value, (id) => { selected.value = id; stage.flyTo(id); });
   stage.onFrame = () => {
     updateLabels();
     const id = selected.value;
@@ -158,6 +183,9 @@ async function boot(): Promise<void> {
     stage.view([tx, ty, tz], [fx, fy, fz], false);
   }
   if (params.has('method')) methodOpen.value = true;
+  if (params.has('audit')) auditOpen.value = true;
+  const pv = params.get('preview');
+  if (pv) { const r = agents.value?.recommendations.find((x) => x.status === 'pending'); const o = r?.options[Number(pv) - 1]; if (r && o) hovered.value = { recId: r.id, optionId: o.id }; }
 
   loading.classList.add('done');
   setTimeout(() => loading.remove(), 500);

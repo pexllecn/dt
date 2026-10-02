@@ -20,6 +20,8 @@ import { buildStation, type StationScene } from './station.ts';
 import { buildSurroundings, type Surroundings } from './surroundings.ts';
 import { FlowLayer } from './flow.ts';
 import { FoldLayer } from './fold.ts';
+import { Markers } from './markers.ts';
+import type { AgentView } from '../agents/types.ts';
 import { SCHEM_CENTRE, SCHEM_EXTENT } from './schematic.ts';
 import { buildYard, terrainHeight } from './yard.ts';
 
@@ -77,6 +79,10 @@ export class Stage {
   surroundings!: Surroundings;
   flow!: FlowLayer;
   fold!: FoldLayer;
+  markers!: Markers;
+  agentView: AgentView | null = null;
+  /** A predicted state to show as a ghost (hovering a recommendation option). */
+  preview: SimState | null = null;
   /** Fades the physical scene during the fold (dithered alpha, no sorting artefacts). */
   private sceneFade = uniform(1);
   private circuitU = uniform(0);
@@ -154,6 +160,8 @@ export class Stage {
     this.scene.add(this.flow.group);
     this.fold = new FoldLayer(this.station.paths);
     this.scene.add(this.fold.group);
+    this.markers = new Markers(this.station.anchors);
+    this.scene.add(this.markers.group);
     // Every physical material can dissolve during the fold.
     this.terrain = yard.group.children.filter((o) => (o as THREE.Mesh).material === this.materials.grass);
     const seen = new Set<THREE.Material>();
@@ -258,9 +266,16 @@ export class Stage {
     this.applyLens();
   }
 
+  /** Show a predicted state as a ghost: the Flow lens view of that future, until cleared. */
+  setPreview(state: SimState | null): void {
+    if (state === this.preview) return;
+    this.preview = state;
+    this.applyLens();
+  }
+
   private applyLens(): void {
-    // The Flow lens waits until the station has unfolded.
-    const on = this.lens === 'flow' && this.fold.controller.p === 0;
+    // The Flow lens waits until the station has unfolded. A preview borrows it.
+    const on = (this.lens === 'flow' || this.preview !== null) && this.fold.controller.p === 0;
     this.flow.setActive(false, [], false);
     if (on) this.flow.setActive(true, [this.station.group, this.surroundings.group], this.theme === 'control');
     this.flowDim.value = on ? 1 : 0;
@@ -577,7 +592,9 @@ export class Stage {
       // Keep depth precision where the camera is looking: the near plane follows the viewing distance.
       const near = THREE.MathUtils.clamp(viewDist * 0.002, 0.8, 12);
       if (Math.abs(near - this.camera.near) > 0.05) { this.camera.near = near; this.camera.updateProjectionMatrix(); }
-      this.flow.update(this.state, dt);
+      this.flow.update(this.preview ?? this.state, dt);
+      this.markers.update(this.agentView, this.state.t, this.time, viewDist);
+      this.markers.group.visible = this.fold.controller.p === 0;
       const wasMoving = this.fold.controller.moving;
       this.fold.update(this.state, dt);
       this.updateFold(wasMoving);

@@ -151,7 +151,7 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
     $('clock').title = compressionLabel(m.clock.effective);
     document.body.dataset.ready = '1';
     render();
-  } else {
+  } else if (m.type === 'result') {
     pending.get(m.id)?.(m.result);
     pending.delete(m.id);
   }
