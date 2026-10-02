@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Clonmore 400/220/110 kV — Station Digital Twin</title>
+<style>
+:root{
+  --bg:#0a0f1e; --panel:#111a30; --panel2:#0e1526; --line:#22304d;
+  --txt:#eaf0fb; --dim:#93a3c4; --dim2:#6b7c9e;
+  --accent:#4da3ff; --teal:#00c2b2; --green:#3ddc84; --amber:#ffb340;
+  --red:#ff5d6c; --violet:#a98bff; --gold:#ffd166; --live:#ffae43;
+  --renew:#3ddc84; --fossil:#ff8b5e; --store:#a98bff; --net:#4da3ff;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);
+  font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:13px}
+#app{display:grid;height:100vh;
+  grid-template-columns:248px 1fr 336px;
+  grid-template-rows:62px 1fr;
+  grid-template-areas:"hd hd hd" "lf ct rt";gap:8px;padding:8px}
+
+/* ---------- header ---------- */
+#hd{grid-area:hd;display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;
+  background:linear-gradient(180deg,#132040,#0f1830);border:1px solid var(--line);border-radius:12px;padding:8px 14px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .lg{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--teal),var(--accent));
+  display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px}
+.brand .t{font-size:14px;font-weight:800;line-height:1.15}
+.brand .s{font-size:10.5px;color:var(--dim)}
+
+/* supply / demand hero */
+#balance{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}
+.bwrap{display:flex;flex-direction:column;gap:3px}
+.brow{display:flex;align-items:center;gap:7px;height:17px}
+.btag{font-size:9.5px;font-weight:800;letter-spacing:.5px;color:var(--dim);width:54px;text-align:right}
+.bbar{flex:1;height:15px;border-radius:5px;background:#0b122c;overflow:hidden;display:flex;
+  border:1px solid #1e2b47}
+.bseg{height:100%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;
+  color:#08121f;transition:width .45s ease;overflow:hidden;white-space:nowrap}
+.bval{font-size:12.5px;font-weight:800;width:74px;font-variant-numeric:tabular-nums}
+#bstate{text-align:center;padding:5px 12px;border-radius:9px;border:1px solid var(--line);background:#0d1628;min-width:132px}
+#bstate .k{font-size:9.5px;color:var(--dim);letter-spacing:.5px;font-weight:700}
+#bstate .v{font-size:15px;font-weight:900;margin-top:1px}
+#hdright{display:flex;gap:9px;align-items:center}
+.hpill{padding:5px 11px;border-radius:9px;border:1px solid var(--line);background:#0d1628;text-align:center;min-width:76px}
+.hpill .k{font-size:9px;color:var(--dim);font-weight:700;letter-spacing:.4px}
+.hpill .v{font-size:14px;font-weight:900;font-variant-numeric:tabular-nums}
+
+/* ---------- panels ---------- */
+.pnl{background:var(--panel);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+.ph{display:flex;align-items:center;gap:7px;padding:7px 11px;border-bottom:1px solid var(--line);background:#0e1730;flex:0 0 auto}
+.ph h3{margin:0;font-size:10.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--dim)}
+.ph .sp{margin-left:auto;font-size:9.5px;color:var(--dim2)}
+.pb{flex:1;overflow:auto;padding:9px}
+
+/* ---------- left rail ---------- */
+#lf{grid-area:lf;display:flex;flex-direction:column;gap:8px;min-height:0}
+#scnPnl{flex:1;min-height:0}
+.sgrp{font-size:9.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--dim2);margin:9px 0 5px}
+.sgrp:first-child{margin-top:0}
+.scn{display:block;width:100%;text-align:left;margin-bottom:5px;padding:7px 9px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--line);background:#0e1830;color:var(--txt);font-size:12px;font-weight:700;transition:.13s}
+.scn:hover{background:#16233f;border-color:var(--accent);transform:translateX(2px)}
+.scn small{display:block;font-weight:400;color:var(--dim);margin-top:1px;font-size:10.5px}
+.scn.g{border-color:#1d4f38}.scn.g:hover{border-color:var(--green)}
+.scn.r{border-color:#4f1d28}.scn.r:hover{border-color:var(--red)}
+.scn.v{border-color:#3a2d5c}.scn.v:hover{border-color:var(--violet)}
+
+/* ---------- centre: 3 views ---------- */
+#ct{grid-area:ct;display:grid;grid-template-rows:1.15fr .85fr;grid-template-columns:1.32fr 1fr;
+  grid-template-areas:"yard net" "sld sld";gap:8px;min-height:0;min-width:0}
+#pYard{grid-area:yard}#pNet{grid-area:net}#pSld{grid-area:sld}
+#pYard,#pNet,#pSld{min-height:0;min-width:0}
+#pYard .pb,#pNet .pb,#pSld .pb{padding:0;position:relative}
+canvas{display:block;width:100%;height:100%}
+#sldSvg{width:100%;height:100%;display:block}
+
+/* ---------- right rail ---------- */
+#rt{grid-area:rt;display:flex;flex-direction:column;gap:8px;min-height:0}
+#inspPnl{flex:0 0 auto;max-height:46%}
+#ctlPnl{flex:1;min-height:0}
+.empty{color:var(--dim2);font-style:italic;font-size:11.5px;padding:6px 2px}
+.kv{display:flex;justify-content:space-between;padding:3px 0;font-size:11.5px;border-bottom:1px dashed #1c2740}
+.kv:last-of-type{border-bottom:none}
+.kv .k{color:var(--dim)}.kv .v{font-weight:800;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:9.5px;font-weight:800}
+.chip.g{background:rgba(61,220,132,.16);color:var(--green)}
+.chip.a{background:rgba(255,179,64,.16);color:var(--amber)}
+.chip.r{background:rgba(255,93,108,.16);color:var(--red)}
+.chip.o{background:rgba(107,124,158,.18);color:var(--dim)}
+
+/* slider row */
+.sl{margin:9px 0 4px}
+.sl .lab{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;margin-bottom:3px}
+.sl .lab b{font-size:12px;font-variant-numeric:tabular-nums}
+.sl .lab .nm{color:var(--dim);font-weight:700}
+input[type=range]{width:100%;height:16px;-webkit-appearance:none;background:transparent;cursor:pointer;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:4px;background:#1b2740}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--accent);border:2px solid #0a0f1e;margin-top:-5px;box-shadow:0 0 0 1px var(--accent)}
+input[type=range].rn::-webkit-slider-thumb{background:var(--renew);box-shadow:0 0 0 1px var(--renew)}
+input[type=range].fo::-webkit-slider-thumb{background:var(--fossil);box-shadow:0 0 0 1px var(--fossil)}
+input[type=range].st::-webkit-slider-thumb{background:var(--store);box-shadow:0 0 0 1px var(--store)}
+input[type=range].dm::-webkit-slider-thumb{background:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+input[type=range]:disabled::-webkit-slider-thumb{background:#3b4a66;box-shadow:none}
+
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:7px}
+.btn{padding:7px;border-radius:7px;border:1px solid var(--line);background:#14203a;color:var(--txt);
+  font-size:11.5px;font-weight:700;cursor:pointer;text-align:center;transition:.13s}
+.btn:hover{background:#1c2b4c;border-color:var(--accent)}
+.btn.full{grid-column:1/-1}
+.btn.on{background:rgba(61,220,132,.16);border-color:var(--green);color:var(--green)}
+.btn.off{background:rgba(255,93,108,.14);border-color:var(--red);color:var(--red)}
+.btn.sm{padding:5px;font-size:11px}
+
+.secthead{display:flex;align-items:center;gap:6px;margin:12px 0 2px;font-size:9.5px;font-weight:800;
+  letter-spacing:.6px;text-transform:uppercase;color:var(--dim2)}
+.secthead:first-child{margin-top:0}
+.secthead .dot{width:7px;height:7px;border-radius:50%}
+.secthead .tot{margin-left:auto;color:var(--dim);font-variant-numeric:tabular-nums;font-weight:800;font-size:11px}
+
+/* explain toast */
+#toast{position:fixed;left:50%;transform:translateX(-50%) translateY(-12px);top:74px;z-index:60;
+  width:min(620px,60vw);padding:12px 18px;border-radius:14px;text-align:center;opacity:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(21,38,68,.98),rgba(12,20,38,.98));border:1px solid rgba(77,163,255,.5);
+  box-shadow:0 20px 48px rgba(0,0,0,.6);transition:opacity .25s,transform .25s}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast .tt{font-size:15.5px;font-weight:900}
+#toast .td{font-size:12.5px;color:#c4d6f5;margin-top:5px;line-height:1.45}
+#toast .tm{display:flex;gap:8px;justify-content:center;margin-top:9px;flex-wrap:wrap}
+#toast .tm span{font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.07);
+  border:1px solid var(--line);font-variant-numeric:tabular-nums}
+
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-thumb{background:#243352;border-radius:8px}
+.legend{display:flex;gap:9px;align-items:center;font-size:9.5px;color:var(--dim2);padding:4px 9px;
+  border-top:1px solid var(--line);flex:0 0 auto;flex-wrap:wrap}
+.legend i{width:9px;height:3px;border-radius:2px;display:inline-block;margin-right:3px;vertical-align:middle}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= HEADER ================= -->
+  <div id="hd">
+    <div class="brand">
+      <div class="lg">E</div>
+      <div><div class="t">Clonmore 400/220/110 kV</div><div class="s">EirGrid · Station Digital Twin · IE/NI border</div></div>
+    </div>
+
+    <div id="balance">
+      <div class="bwrap">
+        <div class="brow">
+          <span class="btag">SUPPLY</span>
+          <span class="bbar" id="supBar"></span>
+          <span class="bval" id="supVal">—</span>
+        </div>
+        <div class="brow">
+          <span class="btag">DEMAND</span>
+          <span class="bbar" id="demBar"></span>
+          <span class="bval" id="demVal">—</span>
+        </div>
+      </div>
+      <div id="bstate"><div class="k">BALANCE</div><div class="v" id="balV">—</div></div>
+    </div>
+
+    <div id="hdright">
+      <div class="hpill"><div class="k">RENEWABLE</div><div class="v" id="hRen">—</div></div>
+      <div class="hpill"><div class="k">FREQUENCY</div><div class="v" id="hFreq">—</div></div>
+      <div class="hpill"><div class="k">STATE</div><div class="v" id="hMode">—</div></div>
+    </div>
+  </div>
+
+  <!-- ================= LEFT: SCENARIOS ================= -->
+  <div id="lf">
+    <div class="pnl" id="scnPnl">
+      <div class="ph"><h3>Scenario Library</h3><span class="sp" id="scnCount"></span></div>
+      <div class="pb" id="scnList"></div>
+    </div>
+  </div>
+
+  <!-- ================= CENTRE: THREE VIEWS ================= -->
+  <div id="ct">
+    <div class="pnl" id="pYard">
+      <div class="ph"><h3>① Physical Station — 3D Yard</h3><span class="sp">click any plant item</span></div>
+      <div class="pb"><canvas id="cYard"></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--live)"></i>energised conductor</span>
+        <span><i style="background:#39486b"></i>de-energised</span>
+        <span>▶ moving dots = direction of power flow</span>
+      </div>
+    </div>
+
+    <div class="pnl" id="pNet">
+      <div class="ph"><h3>② Network — external buses &amp; lines</h3><span class="sp">neighbours · border</span></div>
+      <div class="pb"><canvas id="cNet"></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--renew)"></i>renewable</span>
+        <span><i style="background:var(--fossil)"></i>thermal</span>
+        <span><i style="background:var(--store)"></i>storage</span>
+        <span><i style="background:var(--gold)"></i>demand</span>
+        <span><i style="background:var(--net)"></i>network tie</span>
+      </div>
+    </div>
+
+    <div class="pnl" id="pSld">
+      <div class="ph"><h3>③ Circuit — single-line diagram (IEC)</h3><span class="sp">click a breaker to operate it</span></div>
+      <div class="pb"><svg id="sldSvg" viewBox="0 0 1180 330" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+  </div>
+
+  <!-- ================= RIGHT: INSPECTOR + CONTROLS ================= -->
+  <div id="rt">
+    <div class="pnl" id="inspPnl">
+      <div class="ph"><h3>Component Inspector</h3><span class="sp" id="inspTag">nothing selected</span></div>
+      <div class="pb" id="inspBody"><div class="empty">Click a component in any of the three views — it highlights in all of them, and its controls appear here.</div></div>
+    </div>
+    <div class="pnl" id="ctlPnl">
+      <div class="ph"><h3>Supply &amp; Demand Control</h3><span class="sp">drag to adjust</span></div>
+      <div class="pb" id="ctlBody"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"><div class="tt" id="toastT">—</div><div class="td" id="toastD">—</div><div class="tm" id="toastM"></div></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Clonmore Station Digital Twin — engine
+   Three synchronised views (3D yard · network map · single-line circuit)
+   over one power-balance model. Flow direction is derived from the solve,
+   so conductors reverse when the station exports.
+   ===================================================================== */
+
+const $ = (id) => document.getElementById(id);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const fmt = (v,d=0) => (v).toFixed(d);
+const sgn = (v) => v > 0.5 ? 1 : (v < -0.5 ? -1 : 0);
+
+/* ---------------------------------------------------------------
+   1. COMPONENT REGISTRY  (shared by all three views + inspector)
+   --------------------------------------------------------------- */
+const C = {};
+function def(o){ C[o.id] = Object.assign({ closed:true, tripped:false, live:false, mwNow:0, dir:0 }, o); return C[o.id]; }
+
+// --- network / transformers -------------------------------------
+def({id:"GRID",  kind:"grid", name:"National Grid infeed",   kv:"400 kV", cap:900,  note:"Slack source — makes up any shortfall, up to 900 MW import / 700 MW export."});
+def({id:"BUS400",kind:"bus",  name:"400 kV Busbar",          kv:"400 kV"});
+def({id:"T1",    kind:"tx",   name:"Transformer T1",         kv:"400/220 kV", cap:450, temp:28, cool:false, tap:0});
+def({id:"T2",    kind:"tx",   name:"Transformer T2",         kv:"400/220 kV", cap:450, temp:28, cool:false, tap:0});
+def({id:"BUS220",kind:"bus",  name:"220 kV Busbar",          kv:"220 kV"});
+def({id:"T3",    kind:"tx",   name:"Transformer T3",         kv:"220/110 kV", cap:250, temp:26, cool:false, tap:0});
+def({id:"BUS110",kind:"bus",  name:"110 kV Busbar",          kv:"110 kV"});
+
+// --- generation --------------------------------------------------
+def({id:"WIND", kind:"gen", src:"renew",  name:"Ballyhill Wind Farm", kv:"220 kV", cap:200, out:120, avail:160, note:"Variable renewable. Output limited by available wind."});
+def({id:"SOLAR",kind:"gen", src:"renew",  name:"Clonmore Solar Farm", kv:"220 kV", cap:150, out:0,   avail:0, closed:false, installed:false, note:"Daytime renewable. Not yet built — add it from the Scenario Library."});
+def({id:"GAS",  kind:"gen", src:"fossil", name:"Peaking Gas Unit",    kv:"220 kV", cap:180, out:0,   avail:180, closed:false, installed:false, note:"Dispatchable but non-renewable. Use when renewables fall short."});
+def({id:"BESS", kind:"bess",src:"store",  name:"Battery Storage",     kv:"220 kV", cap:100, set:0, soc:55, closed:false, installed:false, note:"+ discharges (supply), − charges (demand). Smooths renewable swings."});
+
+// --- demand ------------------------------------------------------
+def({id:"LD_TOWN",kind:"load", name:"Clonmore Town",        kv:"220 kV", mw:480, homes:620000, note:"Local Irish demand — homes, schools, shops."});
+def({id:"LD_NEW", kind:"load", name:"New Ireland Estate",   kv:"220 kV", mw:0,   homes:0, closed:false, installed:false, note:"A new Irish housing + data estate. Add it from the Scenario Library."});
+def({id:"LD_IND", kind:"load", name:"Industrial Park",      kv:"110 kV", mw:140, homes:0, note:"Continuous industrial demand fed from the 110 kV bus."});
+
+// --- ties --------------------------------------------------------
+def({id:"TIE_NI",kind:"tie", name:"Cross-border Tie → NI",  kv:"220 kV", cap:250, mw:60, homes:90000, coupled:true, note:"Exports to an estate in Northern Ireland. Opens if the all-island system splits."});
+def({id:"TIE_N", kind:"tie2",name:"Tie → Ardnagreany Stn",  kv:"220 kV", cap:200, set:0, note:"Neighbouring station to the north. + imports power in, − exports power out."});
+def({id:"TIE_S", kind:"tie2",name:"Tie → Ballyduff Stn",    kv:"110 kV", cap:150, set:0, note:"Neighbouring station to the south, on the 110 kV bus."});
+
+const SYS = { gridHealthy:true, busFault:false, coupled:true, freq:50.0, shock:0,
+              shedMW:0, storm:0, mode:"NORMAL", reliability:100 };
+
+/* result of the solve, read by every renderer */
+const R = { gridFlow:0, t3Flow:0, supply:0, demand:0, renewPct:0, unbal:0,
+            parts:{ sup:[], dem:[] } };
+
+/* ---------------------------------------------------------------
+   2. SOLVER — one balance, direction included
+   --------------------------------------------------------------- */
+function genOut(id){ const g=C[id]; if(!g.installed && id!=="WIND") return 0;
+  if(!g.closed || g.tripped) return 0; return Math.min(g.out, g.avail); }
+
+function solve(dt){
+  const b400 = C.GRID.closed && SYS.gridHealthy && !C.GRID.tripped;
+  const t1   = b400 && C.T1.closed && !C.T1.tripped;
+  const t2   = b400 && C.T2.closed && !C.T2.tripped;
+  const b220 = (t1||t2) && !SYS.busFault;
+  const t3   = b220 && C.T3.closed && !C.T3.tripped;
+  const b110 = t3;
+
+  C.BUS400.live=b400; C.T1.live=t1; C.T2.live=t2; C.BUS220.live=b220;
+  C.T3.live=t3; C.BUS110.live=b110; C.GRID.live=b400;
+  // everything hanging off a live bus is itself live
+  ["WIND","SOLAR","GAS","BESS","LD_TOWN","LD_NEW","TIE_N"].forEach(id=>C[id].live=b220);
+  C.TIE_NI.live = b220 && SYS.coupled;
+  C.LD_IND.live = b110; C.TIE_S.live = b110;
+
+  // generation on the 220 bus
+  const wind  = b220 ? genOut("WIND")  : 0;
+  const solar = b220 ? genOut("SOLAR") : 0;
+  const gas   = b220 ? genOut("GAS")   : 0;
+  const bessOn = C.BESS.installed && C.BESS.closed && !C.BESS.tripped && b220;
+  let bset = bessOn ? C.BESS.set : 0;
+  if (bset > 0 && C.BESS.soc <= 1) bset = 0;         // empty — cannot discharge
+  if (bset < 0 && C.BESS.soc >= 99) bset = 0;        // full — cannot charge
+  const bDis = Math.max(0, bset), bChg = Math.max(0, -bset);
+
+  // demand
+  const town = (b220 && C.LD_TOWN.closed) ? Math.max(0, C.LD_TOWN.mw - SYS.shedMW) : 0;
+  const nwe  = (b220 && C.LD_NEW.closed && C.LD_NEW.installed) ? C.LD_NEW.mw : 0;
+  const ind  = (b110 && C.LD_IND.closed) ? C.LD_IND.mw : 0;
+  const ni   = (b220 && C.TIE_NI.closed && SYS.coupled && !C.TIE_NI.tripped) ? C.TIE_NI.mw : 0;
+
+  // neighbour ties (+ = import into this station)
+  const nbrN = (b220 && C.TIE_N.closed && !C.TIE_N.tripped) ? C.TIE_N.set : 0;
+  const nbrS = (b110 && C.TIE_S.closed && !C.TIE_S.tripped) ? C.TIE_S.set : 0;
+
+  // 110 kV: what must come down through T3
+  const t3Flow = ind - nbrS;                       // + = 220 → 110
+  // 220 kV balance: what must come through T1/T2 from the 400 kV grid
+  const gridFlow = (town + nwe + ni + t3Flow + bChg)
+                 - (wind + solar + gas + bDis + nbrN);
+
+  // store per-component MW + direction
+  C.WIND.mwNow=wind;  C.WIND.dir  = wind>0?1:0;
+  C.SOLAR.mwNow=solar;C.SOLAR.dir = solar>0?1:0;
+  C.GAS.mwNow=gas;    C.GAS.dir   = gas>0?1:0;
+  C.BESS.mwNow=bset;  C.BESS.dir  = sgn(bset);
+  C.LD_TOWN.mwNow=town; C.LD_TOWN.dir = town>0?-1:0;
+  C.LD_NEW.mwNow=nwe;   C.LD_NEW.dir  = nwe>0?-1:0;
+  C.LD_IND.mwNow=ind;   C.LD_IND.dir  = ind>0?-1:0;
+  C.TIE_NI.mwNow=ni;    C.TIE_NI.dir  = ni>0?-1:0;
+  C.TIE_N.mwNow=nbrN;   C.TIE_N.dir   = sgn(nbrN);
+  C.TIE_S.mwNow=nbrS;   C.TIE_S.dir   = sgn(nbrS);
+  C.T3.mwNow=Math.abs(t3Flow); C.T3.dir = sgn(t3Flow);
+  C.GRID.mwNow=Math.abs(gridFlow); C.GRID.dir = sgn(gridFlow);
+  C.BUS400.mwNow=Math.abs(gridFlow); C.BUS220.mwNow=Math.abs(gridFlow);
+  C.BUS110.mwNow=Math.abs(t3Flow);
+
+  // transformer loading (T1/T2 share the grid flow)
+  const nTx = (t1?1:0)+(t2?1:0);
+  [["T1",t1],["T2",t2]].forEach(([id,on])=>{
+    const c=C[id];
+    c.mwNow = on && nTx ? Math.abs(gridFlow)/nTx : 0;
+    c.loadPU = c.mwNow / c.cap;
+    c.dir = on ? sgn(gridFlow) : 0;
+  });
+  C.T3.loadPU = C.T3.live ? C.T3.mwNow / C.T3.cap : 0;
+
+  // thermal model
+  ["T1","T2","T3"].forEach(id=>{
+    const c=C[id];
+    if(!c.live){ c.temp = Math.max(24, c.temp - 0.7*dt*2); return; }
+    const cf = c.cool ? 0.74 : 1.0;
+    const target = (26 + (c.loadPU||0)*64 + (c.drift||0)) * cf;
+    c.temp += (target - c.temp) * Math.min(1, 0.09*dt*2.5);
+    if((c.loadPU>1.25 || c.temp>93) && !c.tripped){
+      c._ot = (c._ot||0) + dt;
+      if(c._ot > 5){ c.tripped=true; c.closed=false; SYS.reliability=Math.max(0,SYS.reliability-8);
+        toast("⚠ "+id+" tripped on overload", id+" exceeded its safe limit and disconnected itself to avoid damage. Its load has moved to the remaining transformer.", true); }
+    } else c._ot = Math.max(0,(c._ot||0)-dt);
+  });
+
+  // battery state of charge
+  if(bessOn && bset!==0){
+    C.BESS.soc = clamp(C.BESS.soc - (bset/ C.BESS.cap) * dt * 1.6, 0, 100);
+  }
+
+  // grid limits → frequency
+  const impLim = 900, expLim = 700;
+  let unbal = 0;
+  if(gridFlow >  impLim) unbal = gridFlow - impLim;
+  if(gridFlow < -expLim) unbal = gridFlow + expLim;
+  if(!b220) unbal = 0;
+  SYS.shock *= 0.92;
+  const ftarget = 50 - unbal*0.0032 + SYS.shock;
+  SYS.freq += (ftarget - SYS.freq) * Math.min(1, 0.16*dt*3);
+
+  // supply / demand breakdown for the hero bar
+  const sup=[], dem=[];
+  const add=(arr,k,v,col)=>{ if(v>0.5) arr.push({k,v,col}); };
+  add(sup,"Grid import", Math.max(0,gridFlow), "var(--net)");
+  add(sup,"Wind",  wind,  "var(--renew)");
+  add(sup,"Solar", solar, "var(--renew)");
+  add(sup,"Battery", bDis,"var(--store)");
+  add(sup,"Gas",   gas,   "var(--fossil)");
+  add(sup,"Neighbour in", Math.max(0,nbrN)+Math.max(0,nbrS), "var(--net)");
+  add(dem,"Town", town, "var(--gold)");
+  add(dem,"New estate", nwe, "#ffa0d2");
+  add(dem,"Industry", ind, "#ffc98a");
+  add(dem,"NI estate", ni, "#ff9f6e");
+  add(dem,"Battery charge", bChg, "var(--store)");
+  add(dem,"Grid export", Math.max(0,-gridFlow), "var(--net)");
+  add(dem,"Neighbour out", Math.max(0,-nbrN)+Math.max(0,-nbrS), "var(--net)");
+  R.parts.sup=sup; R.parts.dem=dem;
+  R.supply = sup.reduce((a,b)=>a+b.v,0);
+  R.demand = dem.reduce((a,b)=>a+b.v,0);
+  R.renewPct = R.supply>0 ? (wind+solar)/R.supply*100 : 0;
+  R.gridFlow = gridFlow; R.t3Flow = t3Flow; R.unbal = unbal;
+
+  // system state
+  const hot = ["T1","T2","T3"].some(id=>C[id].live && (C[id].temp>84 || C[id].loadPU>1.05));
+  const warm= ["T1","T2","T3"].some(id=>C[id].live && (C[id].temp>66 || C[id].loadPU>0.9));
+  const trip= ["T1","T2","T3"].some(id=>C[id].tripped);
+  if(!b220) SYS.mode="BLACKOUT";
+  else if(trip||hot||Math.abs(SYS.freq-50)>0.35) SYS.mode="EMERGENCY";
+  else if(warm||Math.abs(SYS.freq-50)>0.15||unbal!==0) SYS.mode="ALERT";
+  else SYS.mode="NORMAL";
+}
+
+/* ---------------------------------------------------------------
+   3. SHARED DRAW HELPERS
+   --------------------------------------------------------------- */
+let T = 0;                                  // animation clock
+const LIVE="#ffae43", DEAD="#39486b";
+function flowDots(ctx, ax, ay, bx, by, dir, pu, sizeScale){
+  if(!dir) return;
+  const len = Math.hypot(bx-ax, by-ay); if(len<6) return;
+  const n = Math.max(2, Math.floor(len/26));
+  const spd = 0.00028 + Math.min(0.9,Math.abs(pu||0.4))*0.00055;
+  for(let i=0;i<n;i++){
+    let f = ((i/n) + T*spd*dir) % 1; if(f<0) f+=1;
+    const x = ax+(bx-ax)*f, y = ay+(by-ay)*f;
+    ctx.beginPath(); ctx.arc(x,y,(sizeScale||1)*2.4,0,7);
+    ctx.fillStyle="#fff0cf"; ctx.shadowBlur=9; ctx.shadowColor=LIVE; ctx.fill(); ctx.shadowBlur=0;
+  }
+}
+
+/* ---------------------------------------------------------------
+   4. VIEW ①  — 3D ISOMETRIC YARD
+   --------------------------------------------------------------- */
+const yard = (function(){
+  const cv=$("cYard"), g=cv.getContext("2d");
+  let W=0,H=0,S=6,OX=0,OY=0, hit=[];
+  const P=(x,y,z)=>[OX+(x-y)*S, OY+(x+y)*0.5*S - z*0.86*S];
+
+  /* ---- yard geometry (x = along a bay, y = along a busbar) ---- */
+  const GX=-54, B4X=-28, TX=-4, B2X=16, OUT2=36, T3X=38, B1X=58, OUT1=74;
+  const H4=15, H2=11, H1=7.5;
+  const FEED=[                       // 220 kV feeder bays (y, label, colour)
+    ["WIND",   -16,"WIND","#3ddc84"],     ["SOLAR",  -8,"SOLAR","#3ddc84"],
+    ["BESS",     0,"BATTERY","#a98bff"],       ["GAS",     8,"GAS","#ff8b5e"],
+    ["TIE_N",   16,"↔ ARDNA","#4da3ff"], ["LD_TOWN",24,"TOWN","#ffd166"],
+    ["LD_NEW",  32,"NEW ESTATE","#ffa0d2"], ["TIE_NI", 40,"→ NI ESTATE","#ff9f6e"],
+  ];
+  const FEED1=[ ["LD_IND",-34,"INDUSTRY","#ffc98a"], ["TIE_S",-25,"↔ BALLYD","#4da3ff"] ];
+  const T3Y=-29;
+
+  function fit(){
+    const r=cv.getBoundingClientRect(), d=Math.min(devicePixelRatio||1,2);
+    W=r.width; H=r.height; cv.width=W*d; cv.height=H*d; g.setTransform(d,0,0,d,0,0);
+    const pts=[[GX-14,-16,26],[GX-14,16,26],[OUT1+12,-38,0],[OUT1+12,-18,0],[B2X,-34,H2],[OUT2+22,46,0],[B4X,-20,H4]];
+    let a=1e9,b=-1e9,c=1e9,e=-1e9;
+    pts.forEach(([x,y,z])=>{ const ix=(x-y), iy=(x+y)*0.5-z*0.86;
+      a=Math.min(a,ix);b=Math.max(b,ix);c=Math.min(c,iy);e=Math.max(e,iy); });
+    S=Math.min((W*0.96)/(b-a),(H*0.96)/(e-c));
+    OX=W/2-((a+b)/2)*S; OY=H/2-((c+e)/2)*S;
+  }
+  const rgb=(n)=>[(n>>16)&255,(n>>8)&255,n&255];
+  const cs=(c)=>`rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
+  const sh=(c,f)=>[c[0]*f,c[1]*f,c[2]*f];
+  function poly(pts,fill,stroke,lw){ g.beginPath(); pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));
+    g.closePath(); if(fill){g.fillStyle=fill;g.fill();} if(stroke){g.strokeStyle=stroke;g.lineWidth=lw||1;g.stroke();} }
+  function box(cx,cy,hw,hd,z0,h,col){
+    const t=[[cx-hw,cy-hd],[cx+hw,cy-hd],[cx+hw,cy+hd],[cx-hw,cy+hd]];
+    const A=t.map(([x,y])=>P(x,y,z0+h)), B=t.map(([x,y])=>P(x,y,z0));
+    poly([A[1],A[2],B[2],B[1]],cs(sh(col,.72)));
+    poly([A[2],A[3],B[3],B[2]],cs(sh(col,.52)));
+    poly(A,cs(col),"rgba(0,0,0,.30)",1);
+  }
+  /* conductor with direction-aware travelling dots */
+  function cond(a,b,live,pu,dir,w){
+    const A=P(a[0],a[1],a[2]), B=P(b[0],b[1],b[2]);
+    g.save(); g.lineCap="round";
+    g.strokeStyle=live?LIVE:DEAD; g.lineWidth=w||Math.max(1.5,S*0.15);
+    if(live){ g.shadowBlur=6; g.shadowColor="rgba(255,174,67,.7)"; }
+    g.beginPath(); g.moveTo(A[0],A[1]); g.lineTo(B[0],B[1]); g.stroke(); g.restore();
+    if(live) flowDots(g,A[0],A[1],B[0],B[1],dir,pu,Math.max(.6,S/8));
+  }
+  function insulator(x,y,z0,h){                      // post insulator stack
+    const a=P(x,y,z0), b=P(x,y,z0+h);
+    g.strokeStyle="#cbd5e6"; g.lineWidth=Math.max(1.3,S*0.12);
+    g.beginPath(); g.moveTo(a[0],a[1]); g.lineTo(b[0],b[1]); g.stroke();
+  }
+  function lattice(x,y,h,wid){                        // gantry / terminal tower
+    const col=rgb(0x5d6a85);
+    box(x,y-wid/2,.55,.55,0,h,col); box(x,y+wid/2,.55,.55,0,h,col);
+    const A=P(x,y-wid/2,h), B=P(x,y+wid/2,h);
+    g.strokeStyle=cs(col); g.lineWidth=Math.max(2,S*0.2);
+    g.beginPath(); g.moveTo(A[0],A[1]); g.lineTo(B[0],B[1]); g.stroke();
+    [h*0.5,h*0.75].forEach(hh=>{ const a=P(x,y-wid/2,hh), b=P(x,y+wid/2,hh);
+      g.lineWidth=1.2; g.beginPath(); g.moveTo(a[0],a[1]); g.lineTo(b[0],b[1]); g.stroke(); });
+  }
+  function busbar(id,x,y0,y1,h){
+    const c=C[id], live=c.live, pu=Math.min(1,(c.mwNow||0)/700);
+    for(let y=y0+1.5;y<=y1-1.5;y+=6){ box(x,y,.5,.5,0,h-1.4,rgb(0x44506b)); insulator(x,y,h-1.4,1.4); }
+    cond([x,y0,h],[x,y1,h],live,pu,c.dir,Math.max(3.4,S*0.44));
+    const m=P(x,y0-2.6,h+1.6);
+    tag(m,(c.kv||"")+"  "+fmt(c.mwNow)+" MW",live?"#ffd9a0":"#7d8cab",id);
+  }
+  /* a switchgear bay running perpendicular off a busbar */
+  function bayRun(id,x0,x1,y,h,pu,dir,live){
+    cond([x0,y,h],[x1,y,h],live,pu,dir);            // the bay conductor
+    const c=C[id];
+    // disconnector (isolator) — visibly open when the breaker is open
+    const dx=x0+(x1-x0)*0.18;
+    const a=P(dx-1.5,y,h), b=P(dx+1.5,y,h);
+    g.strokeStyle=c.closed?"#d7e0f0":"#ff6b7a"; g.lineWidth=Math.max(1.7,S*0.17);
+    g.beginPath(); g.moveTo(a[0],a[1]);
+    if(c.closed) g.lineTo(b[0],b[1]); else { const m=P(dx+0.6,y,h+2.1); g.lineTo(m[0],m[1]); }
+    g.stroke();
+    // circuit breaker on its plinth
+    const bx=x0+(x1-x0)*0.42;
+    insulator(bx,y,3.0,h-3.0);
+    box(bx,y,1.5,1.2,1.4,1.9, c.closed?rgb(0x2f6d4a):rgb(0x74303a));
+    box(bx,y,1.9,1.5,0,1.4, rgb(0x3b4660));
+    const bl=P(bx,y,3.9);
+    g.beginPath(); g.arc(bl[0],bl[1],Math.max(2.2,S*0.26),0,7);
+    g.fillStyle=c.closed?"#3ddc84":"#ff5d6c"; g.shadowBlur=7; g.shadowColor=g.fillStyle; g.fill(); g.shadowBlur=0;
+    // current transformer
+    const cx=x0+(x1-x0)*0.62; insulator(cx,y,2.2,h-2.2);
+    const cp=P(cx,y,2.2); g.strokeStyle="#9fb0cd"; g.lineWidth=1.6;
+    g.beginPath(); g.arc(cp[0],cp[1],Math.max(2,S*0.22),0,7); g.stroke();
+  }
+  function terminal(id,x,y,h,label,col,lane){
+    const c=C[id];
+    const live=c.live&&c.closed&&!c.tripped&&(c.installed!==false);
+    const built=c.installed!==false;
+    cond([x,y,h],[x,y,2.6],c.live&&built,Math.min(1.2,Math.abs(c.mwNow)/(c.cap||250)),c.dir);
+    // terminal structure: cable sealing end / gen symbol / load symbol
+    if(c.kind==="gen"||c.kind==="bess"){
+      box(x,y,1.5,1.5,0,2.6, built? rgb(c.src==="renew"?0x2f6b4d:(c.kind==="bess"?0x4b3f7a:0x6d4331)) : rgb(0x2b3450));
+      if(built){ const t=P(x,y,4.6); g.beginPath(); g.arc(t[0],t[1],Math.max(3,S*0.34),0,7);
+        g.fillStyle="none"; g.strokeStyle=live?col:"#5b6a86"; g.lineWidth=1.8; g.stroke(); }
+    } else if(c.kind==="load"){
+      box(x,y,1.6,1.6,0,2.2, built?rgb(0x6a5a2e):rgb(0x2b3450));
+      if(built){ const t=P(x,y,4.4); g.strokeStyle=live?col:"#5b6a86"; g.lineWidth=1.8;
+        const a=P(x-1.4,y,4.0), b=P(x+1.4,y,4.0);
+        g.beginPath(); g.moveTo(a[0],a[1]); g.lineTo(b[0],b[1]); g.lineTo(t[0],t[1]); g.closePath(); g.stroke(); }
+    } else {
+      box(x,y,1.6,1.4,0,2.4, rgb(0x334f73));
+    }
+    const lp=P(x+4.2+((lane||0)%2)*12.5,y,2.2);
+    const val = !built ? "not built" : (live? fmt(Math.abs(c.mwNow))+" MW" : (c.closed?"0 MW":"OPEN"));
+    tag(lp, label+"  "+val, live?col:"#7d8cab", id);
+  }
+  function transformer(id,x,y){
+    const c=C[id];
+    const hot = c.tripped?rgb(0x8c3a42) : c.temp>84?rgb(0xb8564f) : c.temp>66?rgb(0xa8823c) : rgb(0x6f7c96);
+    box(x-4.0,y,.9,2.2,0,4.8,rgb(0x505c75)); box(x+4.0,y,.9,2.2,0,4.8,rgb(0x505c75));
+    box(x,y,3.2,2.5,0,6.2,hot);
+    const fan=P(x,y,6.6), spin=T*(c.live?0.0035+(c.temp-40)/11000:0.0002);
+    g.save(); g.translate(fan[0],fan[1]); g.rotate(spin);
+    g.strokeStyle=c.cool?"#6ee7ff":"#3a4660"; g.lineWidth=1.7;
+    for(let k=0;k<4;k++){ g.rotate(Math.PI/2); g.beginPath(); g.moveTo(0,0); g.lineTo(S*0.7,0); g.stroke(); }
+    g.restore();
+    const lp=P(x-1,y-5.2,7.8);
+    tag(lp, id+"  "+(c.tripped?"TRIPPED":fmt(c.loadPU*100)+"% · "+fmt(c.temp)+"°C"),
+        c.tripped?"#ff8f9a": c.temp>84?"#ffb0b0": c.temp>66?"#ffe0a6":"#e6edfb", id);
+  }
+  function tag(p,txt,col,id){
+    const fs=Math.max(8.2,S*0.86);
+    g.font="700 "+fs+"px Segoe UI";
+    const w=g.measureText(txt).width+10, h=fs+7;
+    const sel=id&&id===UI.sel;
+    g.fillStyle= sel?"rgba(77,163,255,.95)":"rgba(8,13,26,.86)";
+    g.strokeStyle= sel?"#bcdcff":"rgba(120,150,210,.24)"; g.lineWidth=1;
+    g.beginPath(); g.roundRect(p[0]-w/2,p[1]-h/2,w,h,5); g.fill(); g.stroke();
+    g.fillStyle= sel?"#05203f":col; g.textAlign="center"; g.textBaseline="middle";
+    g.fillText(txt,p[0],p[1]);
+    if(id) hit.push({id,x:p[0],y:p[1],w,h});
+  }
+
+  function draw(){
+    hit=[]; g.clearRect(0,0,W,H);
+    const sky=g.createLinearGradient(0,0,0,H); sky.addColorStop(0,"#0a1020"); sky.addColorStop(1,"#0d1526");
+    g.fillStyle=sky; g.fillRect(0,0,W,H);
+    poly([P(GX-12,-40,0),P(OUT1+10,-40,0),P(OUT1+10,48,0),P(GX-12,48,0)],"#161e35");
+    poly([P(GX-6,-37,0),P(OUT1+5,-37,0),P(OUT1+5,45,0),P(GX-6,45,0)],"#1c2742");
+
+    const gPU=Math.min(1,Math.abs(R.gridFlow)/900), gDir=C.GRID.dir, gLive=C.GRID.live;
+    // incoming 400 kV overhead lines
+    lattice(GX,-12,24,8); lattice(GX,12,24,8);
+    cond([GX-14,-12,22],[GX,-12,22],gLive,gPU,gDir);
+    cond([GX-14, 12,22],[GX, 12,22],gLive,gPU,gDir);
+    cond([GX,-12,22],[B4X,-12,H4],gLive,gPU,gDir);
+    cond([GX, 12,22],[B4X, 12,H4],gLive,gPU,gDir);
+    tag(P(GX-14,0,24.5),"NATIONAL GRID  "+fmt(Math.abs(R.gridFlow))+" MW "+(gDir>0?"▶ IN":gDir<0?"◀ OUT":""),
+        gLive?"#a9c8ff":"#7d8cab","GRID");
+
+    busbar("BUS400",B4X,-18,18,H4);
+    // transformer bays: 400 kV side → transformer → 220 kV side
+    [["T1",-9],["T2",9]].forEach(([id,y])=>{
+      const c=C[id], pu=c.loadPU||0;
+      bayRun(id,B4X,TX-3.4,y,H4,pu,c.dir,c.live);
+      cond([TX-3.4,y,H4],[TX-1.4,y,6.2],c.live,pu,c.dir);
+      transformer(id,TX,y);
+      cond([TX+1.4,y,6.2],[TX+3.4,y,H2],c.live,pu,c.dir);
+      cond([TX+3.4,y,H2],[B2X,y,H2],c.live,pu,c.dir);
+    });
+    busbar("BUS220",B2X,-32,44,H2);
+    // 220 kV feeder bays
+    FEED.forEach(([id,y,label,col],i)=>{
+      const c=C[id], pu=Math.min(1.2,Math.abs(c.mwNow)/(c.cap||250));
+      let d=0;
+      if(c.live&&c.closed&&Math.abs(c.mwNow)>0.4){
+        if(c.kind==="load"||c.kind==="tie") d=1;               // bus → out
+        else if(c.kind==="gen") d=-1;                          // in → bus
+        else d = c.mwNow>0 ? -1 : 1;                           // bess / neighbour tie
+      }
+      bayRun(id,B2X,OUT2,y,H2,pu,d,c.live&&c.installed!==false);
+      terminal(id,OUT2,y,H2,label,col,i);
+    });
+    // 220/110 transformer bay
+    bayRun("T3",B2X,T3X-3.4,T3Y,H2,C.T3.loadPU||0,C.T3.dir,C.T3.live);
+    cond([T3X-3.4,T3Y,H2],[T3X-1.4,T3Y,6.2],C.T3.live,C.T3.loadPU,C.T3.dir);
+    transformer("T3",T3X,T3Y);
+    cond([T3X+1.4,T3Y,6.2],[T3X+3.4,T3Y,H1],C.T3.live,C.T3.loadPU,C.T3.dir);
+    cond([T3X+3.4,T3Y,H1],[B1X,T3Y,H1],C.T3.live,C.T3.loadPU,C.T3.dir);
+    busbar("BUS110",B1X,-38,-20,H1);
+    FEED1.forEach(([id,y,label,col],i)=>{
+      const c=C[id], pu=Math.min(1.2,Math.abs(c.mwNow)/(c.cap||200));
+      let d=0;
+      if(c.live&&c.closed&&Math.abs(c.mwNow)>0.4) d = (c.kind==="load") ? 1 : (c.mwNow>0?-1:1);
+      bayRun(id,B1X,OUT1,y,H1,pu,d,c.live);
+      terminal(id,OUT1,y,H1,label,col,i);
+    });
+    // control building
+    box(-18,26,4.5,3,0,3.6,rgb(0xc3ccdd));
+    tag(P(-18,26,5.4),"Control building","#0b1226","");
+  }
+  cv.addEventListener("pointerdown",e=>{
+    const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+    for(let i=hit.length-1;i>=0;i--){ const h=hit[i];
+      if(Math.abs(mx-h.x)<h.w/2+4 && Math.abs(my-h.y)<h.h/2+4){ UI.select(h.id); return; } }
+  });
+  return { fit, draw };
+})();
+
+/* ---------------------------------------------------------------
+   5. VIEW ②  — NETWORK MAP (external buses & lines)
+   --------------------------------------------------------------- */
+const net = (function(){
+  const cv=$("cNet"), g=cv.getContext("2d");
+  let W=0,H=0, hit=[];
+  function fit(){ const r=cv.getBoundingClientRect(), d=Math.min(devicePixelRatio||1,2);
+    W=r.width;H=r.height;cv.width=W*d;cv.height=H*d;g.setTransform(d,0,0,d,0,0); }
+
+  // normalised node layout around the station
+  const N = {
+    GRID:   {x:.17,y:.14,l:"National Grid",  s:"400 kV",  c:"#4da3ff"},
+    TIE_N:  {x:.83,y:.14,l:"Ardnagreany",    s:"neighbour 220 kV", c:"#4da3ff"},
+    WIND:   {x:.12,y:.40,l:"Wind Farm",      s:"renewable", c:"#3ddc84"},
+    SOLAR:  {x:.12,y:.60,l:"Solar Farm",     s:"renewable", c:"#3ddc84"},
+    BESS:   {x:.13,y:.80,l:"Battery",        s:"storage",   c:"#a98bff"},
+    GAS:    {x:.32,y:.88,l:"Gas Peaker",     s:"thermal",   c:"#ff8b5e"},
+    LD_TOWN:{x:.54,y:.88,l:"Clonmore Town",  s:"demand",    c:"#ffd166"},
+    LD_NEW: {x:.76,y:.88,l:"New IE Estate",  s:"demand",    c:"#ffa0d2"},
+    LD_IND: {x:.87,y:.66,l:"Industrial Park",s:"110 kV demand", c:"#ffc98a"},
+    TIE_S:  {x:.87,y:.44,l:"Ballyduff",      s:"neighbour 110 kV", c:"#4da3ff"},
+    TIE_NI: {x:.60,y:.15,l:"NI Estate",      s:"cross-border", c:"#ff9f6e"},
+  };
+  const ST={x:.50,y:.50};
+  const px=(n)=>[n.x*W, n.y*H];
+
+  function drawLink(a,b,live,dir,mw,col,pu){
+    const A=px(a),B=px(b);
+    g.save(); g.lineCap="round";
+    g.strokeStyle=live?col:"#2c3a58"; g.lineWidth=live?Math.max(2,2+Math.min(3,(pu||0)*3)):1.6;
+    if(live){g.shadowBlur=6;g.shadowColor=col;}
+    g.beginPath(); g.moveTo(A[0],A[1]); g.lineTo(B[0],B[1]); g.stroke(); g.restore();
+    if(live && dir) flowDots(g,A[0],A[1],B[0],B[1],dir,pu,0.95);
+    if(mw>0.5){
+      const mx=(A[0]+B[0])/2, my=(A[1]+B[1])/2;
+      const t=fmt(mw)+" MW";
+      g.font="800 10px Segoe UI"; const w=g.measureText(t).width+10;
+      g.fillStyle="rgba(8,14,28,.9)"; g.strokeStyle="rgba(120,150,210,.25)"; g.lineWidth=1;
+      g.beginPath(); g.roundRect(mx-w/2,my-8,w,15,5); g.fill(); g.stroke();
+      g.fillStyle="#dbe6fb"; g.textAlign="center"; g.textBaseline="middle"; g.fillText(t,mx,my);
+    }
+  }
+  function node(id,n,live,val){
+    const [x,y]=px(n); const sel=id===UI.sel;
+    const w=Math.min(108,W*0.19), h=34;
+    g.fillStyle= sel?"rgba(77,163,255,.22)":"rgba(14,22,40,.95)";
+    g.strokeStyle= sel?"#7fc0ff":(live?n.c:"#2c3a58"); g.lineWidth=sel?2.2:1.4;
+    g.beginPath(); g.roundRect(x-w/2,y-h/2,w,h,9); g.fill(); g.stroke();
+    g.fillStyle= live?n.c:"#66789c";
+    g.font="800 10.5px Segoe UI"; g.textAlign="center"; g.textBaseline="middle";
+    g.fillText(n.l, x, y-7);
+    g.font="700 9.5px Segoe UI"; g.fillStyle="#93a3c4";
+    g.fillText(val||n.s, x, y+7);
+    hit.push({id,x,y,w,h});
+    // external bus stub
+    g.strokeStyle= live?n.c:"#2c3a58"; g.lineWidth=3;
+    g.beginPath(); g.moveTo(x-w/2+8,y+h/2+4); g.lineTo(x+w/2-8,y+h/2+4); g.stroke();
+  }
+
+  function draw(){
+    hit=[]; g.clearRect(0,0,W,H);
+    g.fillStyle="#0b1223"; g.fillRect(0,0,W,H);
+    // border line (IE | NI)
+    const bx=W*0.72, by0=0, by1=H*0.34;
+    g.save(); g.setLineDash([6,6]); g.strokeStyle="rgba(255,255,255,.22)"; g.lineWidth=1.6;
+    g.beginPath(); g.moveTo(bx,by0); g.lineTo(bx,by1); g.stroke(); g.restore();
+    g.font="800 9.5px Segoe UI"; g.textAlign="center";
+    g.fillStyle="#8fd0ff"; g.fillText("IRELAND", bx-34, 12);
+    g.fillStyle="#ffbf8f"; g.fillText("N. IRELAND", bx+40, 12);
+
+    const S=px(ST);
+    const cap=(id)=>C[id].cap||200;
+    // links
+    drawLink(N.GRID, ST, C.GRID.live, C.GRID.dir, Math.abs(R.gridFlow), "#4da3ff", Math.abs(R.gridFlow)/900);
+    drawLink(N.TIE_N, ST, C.TIE_N.live&&C.TIE_N.closed, -C.TIE_N.dir, Math.abs(C.TIE_N.mwNow), "#4da3ff", Math.abs(C.TIE_N.mwNow)/cap("TIE_N"));
+    drawLink(N.TIE_S, ST, C.TIE_S.live&&C.TIE_S.closed, -C.TIE_S.dir, Math.abs(C.TIE_S.mwNow), "#4da3ff", Math.abs(C.TIE_S.mwNow)/cap("TIE_S"));
+    drawLink(N.TIE_NI, ST, C.TIE_NI.live&&C.TIE_NI.closed&&SYS.coupled, 1, C.TIE_NI.mwNow, "#ff9f6e", C.TIE_NI.mwNow/cap("TIE_NI"));
+    ["WIND","SOLAR","BESS","GAS"].forEach(id=>{
+      const c=C[id], on=c.live&&c.closed&&c.installed!==false&&Math.abs(c.mwNow)>0.4;
+      const dir = id==="BESS" ? (c.mwNow>0?-1:1) : -1;   // into station
+      drawLink(N[id], ST, on, on?dir:0, Math.abs(c.mwNow), N[id].c, Math.abs(c.mwNow)/cap(id));
+    });
+    ["LD_TOWN","LD_NEW","LD_IND"].forEach(id=>{
+      const c=C[id], on=c.live&&c.closed&&c.mwNow>0.4;
+      drawLink(N[id], ST, on, on?1:0, c.mwNow, N[id].c, c.mwNow/500);
+    });
+
+    // station hub
+    const hw=Math.min(132,W*0.22), hh=54;
+    const modeCol = SYS.mode==="NORMAL"?"#3ddc84":SYS.mode==="ALERT"?"#ffb340":"#ff5d6c";
+    g.fillStyle="rgba(18,30,56,.98)"; g.strokeStyle=modeCol; g.lineWidth=2.4;
+    g.beginPath(); g.roundRect(S[0]-hw/2,S[1]-hh/2,hw,hh,12); g.fill(); g.stroke();
+    g.fillStyle="#eaf0fb"; g.font="900 12px Segoe UI"; g.textAlign="center"; g.textBaseline="middle";
+    g.fillText("CLONMORE STN", S[0], S[1]-13);
+    g.font="800 10.5px Segoe UI"; g.fillStyle=modeCol; g.fillText(SYS.mode, S[0], S[1]+2);
+    g.font="700 9.5px Segoe UI"; g.fillStyle="#93a3c4";
+    g.fillText("400 / 220 / 110 kV", S[0], S[1]+16);
+
+    // nodes
+    node("GRID",N.GRID,C.GRID.live, (C.GRID.dir>0?"importing ":C.GRID.dir<0?"exporting ":"")+fmt(Math.abs(R.gridFlow))+" MW");
+    node("TIE_N",N.TIE_N,C.TIE_N.live&&C.TIE_N.closed, C.TIE_N.set>0?"sending us "+fmt(C.TIE_N.set)+" MW":C.TIE_N.set<0?"taking "+fmt(-C.TIE_N.set)+" MW":"idle");
+    node("TIE_S",N.TIE_S,C.TIE_S.live&&C.TIE_S.closed, C.TIE_S.set>0?"sending us "+fmt(C.TIE_S.set)+" MW":C.TIE_S.set<0?"taking "+fmt(-C.TIE_S.set)+" MW":"idle");
+    node("TIE_NI",N.TIE_NI,C.TIE_NI.live&&SYS.coupled, SYS.coupled? fmt(C.TIE_NI.mwNow)+" MW · lit":"SPLIT · dark");
+    ["WIND","SOLAR","BESS","GAS"].forEach(id=>{
+      const c=C[id]; const on=c.installed!==false&&c.closed&&c.live;
+      let v = c.installed===false ? "not built" : (id==="BESS"
+              ? (c.set>0?"discharging "+fmt(c.set):c.set<0?"charging "+fmt(-c.set):"idle")+" · "+fmt(c.soc)+"%"
+              : fmt(c.mwNow)+" MW");
+      node(id,N[id],on,v);
+    });
+    ["LD_TOWN","LD_NEW","LD_IND"].forEach(id=>{
+      const c=C[id];
+      const v = (c.installed===false) ? "not built" : (c.live&&c.closed? fmt(c.mwNow)+" MW":"OFF SUPPLY");
+      node(id,N[id],c.live&&c.closed&&c.installed!==false,v);
+    });
+  }
+  cv.addEventListener("pointerdown",e=>{
+    const r=cv.getBoundingClientRect(), mx=e.clientX-r.left,my=e.clientY-r.top;
+    for(const h of hit){ if(Math.abs(mx-h.x)<h.w/2 && Math.abs(my-h.y)<h.h/2){ UI.select(h.id); return; } }
+  });
+  return { fit, draw };
+})();
+
+/* ---------------------------------------------------------------
+   6. VIEW ③  — SINGLE-LINE CIRCUIT (SVG, IEC style)
+   --------------------------------------------------------------- */
+const sld = (function(){
+  const svg=$("sldSvg");
+  const NS="http://www.w3.org/2000/svg";
+  svg.setAttribute("viewBox","0 0 1400 380");
+  const B400=46, B220=150, B110=258;          // busbar heights
+  const el=(n,a)=>{ const e=document.createElementNS(NS,n); for(const k in a) e.setAttribute(k,a[k]); return e; };
+
+  function line(x1,y1,x2,y2,live,w,dir,pu){
+    const g=el("g",{});
+    g.appendChild(el("line",{x1,y1,x2,y2,stroke:live?LIVE:DEAD,"stroke-width":w||2.4,"stroke-linecap":"round"}));
+    if(live&&dir){
+      const len=Math.hypot(x2-x1,y2-y1), n=Math.max(1,Math.floor(len/26));
+      for(let i=0;i<n;i++){
+        let f=((i/n)+T*0.00035*dir)%1; if(f<0)f+=1;
+        g.appendChild(el("circle",{cx:x1+(x2-x1)*f, cy:y1+(y2-y1)*f, r:2.7, fill:"#fff0cf"}));
+      }
+    }
+    return g;
+  }
+  function busline(id,y,x0,x1,label){
+    const c=C[id], live=c.live;
+    const g=el("g",{class:"clk",style:"cursor:pointer"}); g.dataset.id=id;
+    g.appendChild(el("line",{x1:x0,y1:y,x2:x1,y2:y,stroke:live?LIVE:DEAD,"stroke-width":8,"stroke-linecap":"round"}));
+    const t=el("text",{x:x0-10,y:y+5,"text-anchor":"end",fill:live?"#ffd9a0":"#7d8cab","font-size":13,"font-weight":800});
+    t.textContent=label; g.appendChild(t);
+    const m=el("text",{x:x1+12,y:y+5,fill:"#93a3c4","font-size":11.5,"font-weight":700});
+    m.textContent=fmt(c.mwNow)+" MW"; g.appendChild(m);
+    if(UI.sel===id) g.appendChild(el("rect",{x:x0-6,y:y-9,width:x1-x0+12,height:18,rx:6,
+      fill:"none",stroke:"#7fc0ff","stroke-width":1.6,"stroke-dasharray":"5 4"}));
+    return g;
+  }
+  function brk(id,x,y){
+    const c=C[id], g=el("g",{class:"clk",style:"cursor:pointer"}); g.dataset.id=id;
+    g.appendChild(el("rect",{x:x-8,y:y-8,width:16,height:16,rx:2.5,
+      fill:c.closed?"rgba(61,220,132,.24)":"rgba(255,93,108,.24)",
+      stroke:c.closed?"#3ddc84":"#ff5d6c","stroke-width":2.2}));
+    if(!c.closed) g.appendChild(el("line",{x1:x-5.5,y1:y-5.5,x2:x+5.5,y2:y+5.5,stroke:"#ff5d6c","stroke-width":2.2}));
+    return g;
+  }
+  function txSym(id,x,y){
+    const c=C[id], col=c.tripped?"#ff5d6c":c.live?(c.temp>84?"#ff5d6c":c.temp>66?"#ffb340":LIVE):DEAD;
+    const g=el("g",{class:"clk",style:"cursor:pointer"}); g.dataset.id=id;
+    g.appendChild(el("circle",{cx:x,cy:y-8,r:11,fill:"none",stroke:col,"stroke-width":2.4}));
+    g.appendChild(el("circle",{cx:x,cy:y+8,r:11,fill:"none",stroke:col,"stroke-width":2.4}));
+    const t=el("text",{x:x+19,y:y-2,fill:UI.sel===id?"#7fc0ff":"#cfd8ea","font-size":12,"font-weight":800});
+    t.textContent=id; g.appendChild(t);
+    const l=el("text",{x:x+19,y:y+13,fill:"#93a3c4","font-size":10.5,"font-weight":700});
+    l.textContent=c.tripped?"TRIPPED":fmt(c.loadPU*100)+"% · "+fmt(c.temp)+"°C"; g.appendChild(l);
+    if(UI.sel===id) g.appendChild(el("circle",{cx:x,cy:y,r:26,fill:"none",stroke:"#7fc0ff","stroke-width":1.6,"stroke-dasharray":"5 4"}));
+    return g;
+  }
+  /* every feeder hangs DOWN from its busbar: bus → breaker → plant symbol → label */
+  function feeder(id,x,busY,label,col){
+    const c=C[id], built=c.installed!==false;
+    const live=c.live&&c.closed&&!c.tripped&&built;
+    const g=el("g",{});
+    const pu=Math.min(1.2,Math.abs(c.mwNow)/(c.cap||250));
+    let d=0;
+    if(live&&Math.abs(c.mwNow)>0.4){
+      if(c.kind==="load"||c.kind==="tie") d=1;                       // bus → out (demand)
+      else if(c.kind==="gen") d=-1;                                  // in → bus (supply)
+      else d = c.mwNow>0 ? -1 : 1;                                   // battery / neighbour tie
+    }
+    const yBrk=busY+26, ySym=busY+62, yLab=busY+88, yVal=busY+102;
+    g.appendChild(line(x,busY,x,yBrk-8,live,2.4,d,pu));
+    g.appendChild(brk(id,x,yBrk));
+    g.appendChild(line(x,yBrk+8,x,ySym-12,live,2.4,d,pu));
+    const gl=el("g",{class:"clk",style:"cursor:pointer"}); gl.dataset.id=id;
+        const stroke = built ? (live?col:DEAD) : "#404d68";
+    if(c.kind==="gen"||c.kind==="bess"){
+      gl.appendChild(el("circle",{cx:x,cy:ySym,r:12,fill:"none",stroke:stroke,"stroke-width":2.2}));
+      const s=el("text",{x:x,y:ySym+4.5,"text-anchor":"middle",fill:stroke,"font-size":11,"font-weight":800});
+      s.textContent = c.kind==="bess"?"B":(c.src==="renew"?"~":"G"); gl.appendChild(s);
+    } else if(c.kind==="load"){
+      gl.appendChild(el("path",{d:`M${x-10},${ySym-9} L${x+10},${ySym-9} L${x},${ySym+10} Z`,
+        fill:"none",stroke:stroke,"stroke-width":2.2}));
+    } else {
+      gl.appendChild(el("rect",{x:x-11,y:ySym-10,width:22,height:20,rx:3,fill:"none",stroke:stroke,"stroke-width":2.2}));
+      const s=el("text",{x:x,y:ySym+4.5,"text-anchor":"middle",fill:stroke,"font-size":10,"font-weight":800});
+      s.textContent="↔"; gl.appendChild(s);
+    }
+    g.appendChild(gl);
+    const lt=el("text",{x:x,y:yLab,"text-anchor":"middle",fill:UI.sel===id?"#7fc0ff":"#cfd8ea","font-size":11,"font-weight":800});
+    lt.textContent=label; g.appendChild(lt);
+    const mv=el("text",{x:x,y:yVal,"text-anchor":"middle",fill:"#93a3c4","font-size":10.5,"font-weight":700});
+    mv.textContent = !built?"not built":(live? fmt(Math.abs(c.mwNow))+" MW" : (c.closed?"0 MW":"OPEN"));
+    g.appendChild(mv);
+    if(UI.sel===id) g.appendChild(el("rect",{x:x-40,y:busY-8,width:80,height:yVal-busY+18,rx:9,
+      fill:"rgba(77,163,255,.09)",stroke:"#7fc0ff","stroke-width":1.5,"stroke-dasharray":"5 4"}));
+    return g;
+  }
+
+  function draw(){
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+    const f=document.createDocumentFragment();
+    const gPU=Math.min(1,Math.abs(R.gridFlow)/900);
+
+    // ---- 400 kV incoming from the national grid ----
+    f.appendChild(line(58,B400,104,B400,C.GRID.live,2.8,C.GRID.dir,gPU));
+    const gt=el("text",{x:150,y:B400-16,fill:"#a9c8ff","font-size":12,"font-weight":800});
+    gt.textContent="GRID "+fmt(Math.abs(R.gridFlow))+" MW "+(C.GRID.dir>0?"▶ IN":C.GRID.dir<0?"◀ OUT":"");
+    f.appendChild(gt);
+    f.appendChild(brk("GRID",112,B400));
+    f.appendChild(line(120,B400,180,B400,C.GRID.live,2.8,C.GRID.dir,gPU));
+    f.appendChild(busline("BUS400",B400,180,440,"400 kV"));
+
+    // ---- T1 / T2 between 400 and 220 ----
+    [["T1",235],["T2",365]].forEach(([id,x])=>{
+      const c=C[id];
+      f.appendChild(line(x,B400,x,B400+18,c.live,2.4,c.dir,c.loadPU));
+      f.appendChild(brk(id,x,B400+28));
+      f.appendChild(line(x,B400+38,x,B400+50,c.live,2.4,c.dir,c.loadPU));
+      f.appendChild(txSym(id,x,B400+62));
+      f.appendChild(line(x,B400+82,x,B220,c.live,2.4,c.dir,c.loadPU));
+    });
+
+    // ---- 220 kV bus and its feeders ----
+    f.appendChild(busline("BUS220",B220,150,1180,"220 kV"));
+    [["WIND",195,"WIND","#3ddc84"], ["SOLAR",290,"SOLAR","#3ddc84"],
+     ["BESS",385,"BATTERY","#a98bff"], ["GAS",480,"GAS","#ff8b5e"],
+     ["TIE_N",580,"↔ ARDNAGREANY","#4da3ff"], ["LD_TOWN",700,"CLONMORE TOWN","#ffd166"],
+     ["LD_NEW",815,"NEW IE ESTATE","#ffa0d2"], ["TIE_NI",925,"→ NI ESTATE","#ff9f6e"],
+    ].forEach(([id,x,l,c])=> f.appendChild(feeder(id,x,B220,l,c)));
+
+    // ---- T3 down to the 110 kV bus (right-hand side, clear of the feeders) ----
+    const t3x=1110, c3=C.T3;
+    f.appendChild(line(t3x,B220,t3x,B220+16,c3.live,2.4,c3.dir,c3.loadPU));
+    f.appendChild(brk("T3",t3x,B220+26));
+    f.appendChild(line(t3x,B220+36,t3x,B220+46,c3.live,2.4,c3.dir,c3.loadPU));
+    f.appendChild(txSym("T3",t3x,B220+58));
+    f.appendChild(line(t3x,B220+78,t3x,B110,c3.live,2.4,c3.dir,c3.loadPU));
+    f.appendChild(busline("BUS110",B110,1035,1310,"110 kV"));
+    [["LD_IND",1120,"INDUSTRIAL PARK","#ffc98a"], ["TIE_S",1265,"↔ BALLYDUFF","#4da3ff"]]
+      .forEach(([id,x,l,c])=> f.appendChild(feeder(id,x,B110,l,c)));
+
+    svg.appendChild(f);
+    svg.querySelectorAll(".clk").forEach(n=>{
+      n.addEventListener("click",()=>{ const id=n.dataset.id; if(!id) return;
+        if(UI.sel===id && C[id] && C[id].kind!=="bus") UI.toggle(id); else UI.select(id); });
+    });
+  }
+  return { draw, fit(){} };
+})();
+
+/* ---------------------------------------------------------------
+   7. UI — inspector · supply/demand control · scenarios · loop
+   --------------------------------------------------------------- */
+const UI = { sel:null };
+
+/* ---------- toast (what just happened) ---------- */
+let toastTimer=0;
+function toast(title, detail, bad, metrics){
+  $("toastT").textContent=title;
+  $("toastT").style.color = bad ? "#ff8f9a" : "#eaf0fb";
+  $("toastD").textContent=detail||"";
+  $("toastM").innerHTML = (metrics||[]).map(m=>`<span>${m}</span>`).join("");
+  const t=$("toast"); t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"), 7000);
+}
+function snap(){ return { sup:R.supply, dem:R.demand, grid:R.gridFlow, t1:(C.T1.loadPU||0)*100,
+                          f:SYS.freq, ren:R.renewPct, t1t:C.T1.temp }; }
+function deltas(b){
+  const a=snap(), out=[];
+  const row=(lbl,bv,av,u,d)=>{ if(Math.abs(av-bv)<(d||1)) return;
+    const up=av>bv; out.push(`${lbl} ${fmt(bv,u==="Hz"?2:0)}→${fmt(av,u==="Hz"?2:0)}${u} ${up?"▲":"▼"}`); };
+  row("Supply",b.sup,a.sup," MW"); row("Demand",b.dem,a.dem," MW");
+  row("Grid",b.grid,a.grid," MW"); row("T1",b.t1,a.t1,"%");
+  row("Renew",b.ren,a.ren,"%"); row("Freq",b.f,a.f,"Hz",0.02);
+  return out;
+}
+
+/* ---------- selection & switching ---------- */
+UI.select = (id)=>{ if(!C[id]) return; UI.sel=id; renderInspector(); };
+UI.toggle = (id)=>{
+  const c=C[id]; if(!c) return;
+  const b=snap(); const willClose=!c.closed;
+  if(willClose && c.tripped){ c.tripped=false; c._ot=0; }
+  c.closed=willClose;
+  const nm=c.name;
+  toast((willClose?"Closed ":"Opened ")+nm,
+    willClose ? `${nm} is back in service. Watch the three views: the conductor lights up and power re-routes through it.`
+              : `${nm} is now open. Power has to find another path — the flow arrows change direction or stop.`,
+    !willClose, deltas(b));
+  renderInspector();
+};
+
+/* ---------- component inspector ---------- */
+function slider(o){
+  const id="sl_"+o.key;
+  return `<div class="sl">
+    <div class="lab"><span class="nm">${o.label}</span><b id="${id}_v">${o.fmt(o.value)}</b></div>
+    <input type="range" id="${id}" class="${o.cls||''}" min="${o.min}" max="${o.max}" step="${o.step||1}" value="${o.value}">
+  </div>`;
+}
+function wireSlider(key, onInput, fmtFn){
+  const el=$("sl_"+key); if(!el) return;
+  el.addEventListener("input",()=>{ const v=parseFloat(el.value);
+    const lab=$("sl_"+key+"_v"); if(lab) lab.textContent=fmtFn(v); onInput(v); });
+}
+function renderInspector(){
+  const id=UI.sel, body=$("inspBody"), tag=$("inspTag");
+  if(!id||!C[id]){ tag.textContent="nothing selected";
+    body.innerHTML='<div class="empty">Click a component in any of the three views — it highlights in all of them, and its controls appear here.</div>'; return; }
+  const c=C[id]; tag.textContent=id;
+  const st = c.tripped ? '<span class="chip r">TRIPPED</span>'
+           : (c.installed===false) ? '<span class="chip o">NOT BUILT</span>'
+           : (!c.closed) ? '<span class="chip a">OPEN</span>'
+           : (c.live? '<span class="chip g">IN SERVICE</span>':'<span class="chip o">DEAD</span>');
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <strong style="font-size:13px">${c.name}</strong>${st}</div>
+    <div class="kv"><span class="k">Voltage</span><span class="v">${c.kv||"—"}</span></div>`;
+
+  if(c.kind==="tx"){
+    h+=`<div class="kv"><span class="k">Loading</span><span class="v">${fmt(c.mwNow)} MW · ${fmt((c.loadPU||0)*100)}%</span></div>
+        <div class="kv"><span class="k">Hot-spot temp</span><span class="v">${fmt(c.temp)} °C ${c.cool?"❄":""}</span></div>
+        <div class="kv"><span class="k">Rating</span><span class="v">${c.cap} MVA</span></div>
+        <div class="kv"><span class="k">Flow</span><span class="v">${c.dir>0?"400→220 kV":c.dir<0?"220→400 kV (export)":"none"}</span></div>`;
+  }
+  if(c.kind==="gen"){
+    h+=`<div class="kv"><span class="k">Type</span><span class="v">${c.src==="renew"?"Renewable":"Non-renewable"}</span></div>
+        <div class="kv"><span class="k">Output</span><span class="v">${fmt(c.mwNow)} MW of ${c.cap} MW</span></div>`;
+    if(c.installed!==false){
+      h+=slider({key:"gout",label:"Set output (MW)",value:Math.min(c.out,c.avail),min:0,max:c.cap,
+                 cls:c.src==="renew"?"rn":"fo",fmt:v=>fmt(v)+" MW"});
+      h+=slider({key:"gavail",label:c.src==="renew"?"Resource available (MW)":"Fuel / availability (MW)",
+                 value:c.avail,min:0,max:c.cap,cls:c.src==="renew"?"rn":"fo",fmt:v=>fmt(v)+" MW"});
+    }
+  }
+  if(c.kind==="bess"){
+    h+=`<div class="kv"><span class="k">State of charge</span><span class="v">${fmt(c.soc)} %</span></div>
+        <div class="kv"><span class="k">Now</span><span class="v">${c.set>0?"discharging":c.set<0?"charging":"idle"} ${fmt(Math.abs(c.set))} MW</span></div>`;
+    if(c.installed!==false)
+      h+=slider({key:"bset",label:"− charge  ·  discharge +",value:c.set,min:-c.cap,max:c.cap,cls:"st",fmt:v=>fmt(v)+" MW"});
+  }
+  if(c.kind==="load"){
+    h+=`<div class="kv"><span class="k">Demand</span><span class="v">${fmt(c.mwNow)} MW</span></div>`;
+    if(c.homes) h+=`<div class="kv"><span class="k">Homes served</span><span class="v">${c.live&&c.closed?Math.round(c.mwNow/ c.mw * c.homes/1000)+"k":"0"}</span></div>`;
+    if(c.installed!==false)
+      h+=slider({key:"lmw",label:"Demand (MW)",value:c.mw,min:0,max:Math.max(600,c.mw*2),cls:"dm",fmt:v=>fmt(v)+" MW"});
+  }
+  if(c.kind==="tie"){
+    h+=`<div class="kv"><span class="k">Export to NI</span><span class="v">${fmt(c.mwNow)} MW</span></div>
+        <div class="kv"><span class="k">All-island</span><span class="v">${SYS.coupled?"coupled":"SPLIT"}</span></div>`;
+    h+=slider({key:"nimw",label:"NI estate demand (MW)",value:c.mw,min:0,max:c.cap,cls:"dm",fmt:v=>fmt(v)+" MW"});
+  }
+  if(c.kind==="tie2"){
+    h+=`<div class="kv"><span class="k">Now</span><span class="v">${c.set>0?"importing":c.set<0?"exporting":"idle"} ${fmt(Math.abs(c.set))} MW</span></div>`;
+    h+=slider({key:"tset",label:"− we export  ·  we import +",value:c.set,min:-c.cap,max:c.cap,fmt:v=>fmt(v)+" MW"});
+  }
+  if(c.kind==="grid"){
+    h+=`<div class="kv"><span class="k">Flow</span><span class="v">${fmt(Math.abs(R.gridFlow))} MW ${R.gridFlow>0?"import":R.gridFlow<0?"EXPORT":""}</span></div>
+        <div class="kv"><span class="k">Limits</span><span class="v">900 in / 700 out</span></div>`;
+  }
+  if(c.kind==="bus"){
+    h+=`<div class="kv"><span class="k">Through-flow</span><span class="v">${fmt(c.mwNow)} MW</span></div>
+        <div class="kv"><span class="k">Fault</span><span class="v">${(id==="BUS220"&&SYS.busFault)?"EARTH FAULT":"none"}</span></div>`;
+  }
+  if(c.note) h+=`<div style="font-size:11px;color:var(--dim);margin-top:8px;line-height:1.45;font-style:italic">${c.note}</div>`;
+
+  // action buttons
+  h+=`<div class="btns">`;
+  if(c.installed===false){
+    h+=`<div class="btn full" id="ib_build">＋ Build / connect this</div>`;
+  } else {
+    if(c.kind!=="bus") h+=`<div class="btn ${c.closed?"off":"on"}" id="ib_sw">${c.closed?"Open breaker":"Close breaker"}</div>`;
+    if(c.kind==="tx"){ h+=`<div class="btn ${c.cool?"off":"on"}" id="ib_cool">${c.cool?"Stop cooling":"Extra cooling"}</div>`;
+      if(c.tripped) h+=`<div class="btn full on" id="ib_rst">Reset &amp; re-close ${id}</div>`; }
+    if(c.kind==="bus"&&id==="BUS220"&&SYS.busFault) h+=`<div class="btn full on" id="ib_clr">Clear fault &amp; re-energise</div>`;
+    if(c.kind==="tie") h+=`<div class="btn ${SYS.coupled?"off":"on"}" id="ib_cpl">${SYS.coupled?"Split from NI":"Re-couple NI"}</div>`;
+  }
+  h+=`</div>`;
+  body.innerHTML=h;
+
+  // wire controls
+  const b=()=>snap();
+  if($("ib_sw")) $("ib_sw").onclick=()=>UI.toggle(id);
+  if($("ib_cool")) $("ib_cool").onclick=()=>{ const s=b(); c.cool=!c.cool;
+    toast((c.cool?"Started":"Stopped")+" extra cooling on "+id,
+      c.cool?`Forced cooling pushes more oil and air through ${id}'s radiators, so its hot-spot temperature falls and it can safely carry more load.`
+            :`Cooling stopped on ${id}; its temperature will settle back up to the load-driven level.`,false,deltas(s));
+    renderInspector(); };
+  if($("ib_rst")) $("ib_rst").onclick=()=>{ const s=b(); c.tripped=false; c._ot=0; c.closed=true; c.temp=Math.min(c.temp,70);
+    toast("Reset "+id, `${id} is back in service and shares the load again — both transformer loadings and temperatures drop.`,false,deltas(s)); renderInspector(); };
+  if($("ib_clr")) $("ib_clr").onclick=()=>{ const s=b(); SYS.busFault=false; C.BUS220.closed=true;
+    toast("Fault cleared — 220 kV bus re-energised","You confirmed the fault was gone before re-closing. Supply returns to the town, the new estate and the NI tie.",false,deltas(s)); renderInspector(); };
+  if($("ib_cpl")) $("ib_cpl").onclick=()=>{ const s=b(); SYS.coupled=!SYS.coupled; SYS.shock = SYS.coupled?0.05:0.22;
+    toast(SYS.coupled?"Re-coupled to Northern Ireland":"Split from Northern Ireland",
+      SYS.coupled?"The cross-border tie is back in service — the NI estate is supplied from Clonmore again."
+                 :"The all-island system has separated. The cross-border tie opens, the NI estate is no longer fed from here, and the power that was flowing to it has to go somewhere else.",
+      !SYS.coupled,deltas(s)); renderInspector(); };
+  if($("ib_build")) $("ib_build").onclick=()=>{ const s=b(); c.installed=true; c.closed=true;
+    if(c.kind==="gen"){ c.avail=c.cap*0.9; c.out=c.cap*0.9; }
+    if(c.kind==="bess"){ c.set=0; }
+    if(c.kind==="load"&&!c.mw) c.mw=120;
+    toast("Connected "+c.name, `${c.name} is now part of the station. Watch the supply/demand bar and the three views update.`,false,deltas(s));
+    renderControls(); renderInspector(); };
+
+  wireSlider("gout",v=>{ c.out=v; },v=>fmt(v)+" MW");
+  wireSlider("gavail",v=>{ c.avail=v; },v=>fmt(v)+" MW");
+  wireSlider("bset",v=>{ c.set=v; },v=>fmt(v)+" MW");
+  wireSlider("lmw",v=>{ c.mw=v; },v=>fmt(v)+" MW");
+  wireSlider("nimw",v=>{ c.mw=v; },v=>fmt(v)+" MW");
+  wireSlider("tset",v=>{ c.set=v; },v=>fmt(v)+" MW");
+}
+
+/* ---------- supply & demand control panel ---------- */
+function renderControls(){
+  const rows=[];
+  const sec=(t,col,total)=>`<div class="secthead"><span class="dot" style="background:${col}"></span>${t}<span class="tot">${total}</span></div>`;
+  const genRow=(id,cls)=>{ const c=C[id];
+    if(c.installed===false) return `<div class="sl"><div class="lab"><span class="nm">${c.name}</span><b style="color:var(--dim2)">not built</b></div>
+      <div class="btn sm" data-build="${id}">＋ Build ${c.name}</div></div>`;
+    return slider({key:"c_"+id,label:c.name,value:Math.min(c.out,c.avail),min:0,max:c.cap,cls,fmt:v=>fmt(v)+" MW"}); };
+  const loadRow=(id)=>{ const c=C[id];
+    if(c.installed===false) return `<div class="sl"><div class="lab"><span class="nm">${c.name}</span><b style="color:var(--dim2)">not built</b></div>
+      <div class="btn sm" data-build="${id}">＋ Add ${c.name}</div></div>`;
+    return slider({key:"c_"+id,label:c.name,value:c.mw,min:0,max:Math.max(600,c.mw*2),cls:"dm",fmt:v=>fmt(v)+" MW"}); };
+
+  rows.push(sec("Renewable supply","var(--renew)", fmt(C.WIND.mwNow+C.SOLAR.mwNow)+" MW"));
+  rows.push(genRow("WIND","rn")); rows.push(genRow("SOLAR","rn"));
+  rows.push(sec("Storage","var(--store)", (C.BESS.installed? (C.BESS.set>0?"+":"")+fmt(C.BESS.set)+" MW · "+fmt(C.BESS.soc)+"%":"—")));
+  rows.push(C.BESS.installed
+    ? slider({key:"c_BESS",label:"Battery  − charge / discharge +",value:C.BESS.set,min:-C.BESS.cap,max:C.BESS.cap,cls:"st",fmt:v=>fmt(v)+" MW"})
+    : `<div class="sl"><div class="lab"><span class="nm">Battery Storage</span><b style="color:var(--dim2)">not built</b></div>
+       <div class="btn sm" data-build="BESS">＋ Build 100 MW battery</div></div>`);
+  rows.push(sec("Thermal (non-renewable)","var(--fossil)", fmt(C.GAS.mwNow)+" MW"));
+  rows.push(genRow("GAS","fo"));
+  rows.push(sec("Neighbouring stations","var(--net)", fmt(C.TIE_N.set+C.TIE_S.set)+" MW net"));
+  rows.push(slider({key:"c_TIE_N",label:"Ardnagreany  − out / in +",value:C.TIE_N.set,min:-C.TIE_N.cap,max:C.TIE_N.cap,fmt:v=>fmt(v)+" MW"}));
+  rows.push(slider({key:"c_TIE_S",label:"Ballyduff  − out / in +",value:C.TIE_S.set,min:-C.TIE_S.cap,max:C.TIE_S.cap,fmt:v=>fmt(v)+" MW"}));
+  rows.push(sec("Demand","var(--gold)", fmt(R.demand)+" MW"));
+  rows.push(loadRow("LD_TOWN")); rows.push(loadRow("LD_NEW")); rows.push(loadRow("LD_IND"));
+  rows.push(slider({key:"c_TIE_NI",label:"NI estate (cross-border)",value:C.TIE_NI.mw,min:0,max:C.TIE_NI.cap,cls:"dm",fmt:v=>fmt(v)+" MW"}));
+  rows.push(`<div class="btns" style="margin-top:12px">
+      <div class="btn" data-q="dem+">Demand +50 MW</div><div class="btn" data-q="dem-">Demand −50 MW</div>
+      <div class="btn" data-q="sup+">Supply +50 MW</div><div class="btn" data-q="sup-">Supply −50 MW</div>
+      <div class="btn full on" data-q="bal">⚖ Auto-balance the station</div></div>`);
+  $("ctlBody").innerHTML=rows.join("");
+
+  const link=(key,fn)=>wireSlider(key,fn,v=>fmt(v)+" MW");
+  link("c_WIND", v=>{C.WIND.out=v;});
+  link("c_SOLAR",v=>{C.SOLAR.out=v;});
+  link("c_GAS",  v=>{C.GAS.out=v;});
+  link("c_BESS", v=>{C.BESS.set=v;});
+  link("c_TIE_N",v=>{C.TIE_N.set=v;});
+  link("c_TIE_S",v=>{C.TIE_S.set=v;});
+  link("c_LD_TOWN",v=>{C.LD_TOWN.mw=v;});
+  link("c_LD_NEW", v=>{C.LD_NEW.mw=v;});
+  link("c_LD_IND", v=>{C.LD_IND.mw=v;});
+  link("c_TIE_NI", v=>{C.TIE_NI.mw=v;});
+
+  $("ctlBody").querySelectorAll("[data-build]").forEach(b=>b.onclick=()=>{
+    const c=C[b.dataset.build]; const s=snap(); c.installed=true; c.closed=true;
+    if(c.kind==="gen"){ c.avail=c.cap*0.9; c.out=c.cap*0.9; }
+    if(c.kind==="load"&&!c.mw) c.mw=120;
+    toast("Connected "+c.name,`${c.name} is now part of the station.`,false,deltas(s));
+    renderControls(); });
+  $("ctlBody").querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>quick(b.dataset.q));
+}
+function quick(k){
+  const s=snap();
+  if(k==="dem+"){ C.LD_TOWN.mw+=50; toast("Demand increased by 50 MW","Local demand is up. More power has to come through the transformers — watch their loading rise.",false,deltas(s)); }
+  if(k==="dem-"){ C.LD_TOWN.mw=Math.max(0,C.LD_TOWN.mw-50); toast("Demand reduced by 50 MW","Less load on the station — transformer loading and grid import both fall.",false,deltas(s)); }
+  if(k==="sup+"){ if(C.WIND.out<C.WIND.avail) C.WIND.out=Math.min(C.WIND.avail,C.WIND.out+50);
+                  else if(C.GAS.installed) C.GAS.out=Math.min(C.GAS.avail,C.GAS.out+50);
+                  toast("Local supply increased by 50 MW","More generation inside the station means less has to be imported from the national grid.",false,deltas(s)); }
+  if(k==="sup-"){ if(C.GAS.installed&&C.GAS.out>0) C.GAS.out=Math.max(0,C.GAS.out-50);
+                  else C.WIND.out=Math.max(0,C.WIND.out-50);
+                  toast("Local supply reduced by 50 MW","Less local generation — the shortfall is pulled from the national grid instead.",false,deltas(s)); }
+  if(k==="bal"){ autoBalance(); }
+  renderControls();
+}
+/* dispatch to meet demand: renewables → battery → neighbours → gas, minimise grid */
+function autoBalance(){
+  const s=snap();
+  const demand = (C.LD_TOWN.live?C.LD_TOWN.mw-SYS.shedMW:0) + (C.LD_NEW.installed?C.LD_NEW.mw:0)
+               + C.LD_IND.mw + (SYS.coupled?C.TIE_NI.mw:0);
+  C.WIND.out = C.WIND.avail;                       // renewables first
+  if(C.SOLAR.installed) C.SOLAR.out = C.SOLAR.avail;
+  let rem = demand - (C.WIND.out + (C.SOLAR.installed?C.SOLAR.out:0));
+  if(C.BESS.installed){                            // battery fills the gap or soaks surplus
+    C.BESS.set = clamp(rem, -C.BESS.cap, C.BESS.cap);
+    if(C.BESS.soc<8 && C.BESS.set>0) C.BESS.set=0;
+    if(C.BESS.soc>95 && C.BESS.set<0) C.BESS.set=0;
+    rem -= C.BESS.set;
+  }
+  if(C.GAS.installed) C.GAS.out = clamp(rem, 0, C.GAS.avail), rem -= C.GAS.out;
+  toast("⚖ Auto-balanced the station",
+    "Dispatch order: renewables first, then the battery, then gas — so the least possible power is drawn from the national grid and the renewable share is as high as it can be.",
+    false, deltas(s));
+}
+
+/* ---------- scenario library ---------- */
+const SCEN=[
+ {g:"Growth &amp; new connections"},
+ {id:"ie_estate", cls:"g", t:"🏘️ New estate in Ireland", d:"+120 MW on the 220 kV bus", run(){
+    C.LD_NEW.installed=true; C.LD_NEW.closed=true; C.LD_NEW.mw=120; C.LD_NEW.homes=150000;
+    return ["New Ireland estate connected (+120 MW)",
+      "A new Irish housing and light-industrial estate is now fed from Clonmore. Demand jumps, so more power is pulled through T1 and T2 from the national grid — watch both transformer loadings and temperatures climb in all three views."]; }},
+ {id:"ni_estate", cls:"g", t:"🏘️ New estate in N. Ireland", d:"+90 MW across the border", run(){
+    C.TIE_NI.mw+=90; C.TIE_NI.closed=true; SYS.coupled=true;
+    return ["New NI estate connected (+90 MW)","Export across the border rises. The station now serves two communities in two jurisdictions from the same 220 kV bus."]; }},
+ {id:"ind_exp",   cls:"g", t:"🏭 Industrial expansion", d:"+60 MW on the 110 kV bus", run(){
+    C.LD_IND.mw+=60;
+    return ["Industrial park expanded (+60 MW)","Extra 110 kV demand means more power flows down through T3 from the 220 kV bus."]; }},
+
+ {g:"Generation mix"},
+ {id:"add_solar", cls:"g", t:"☀️ Build a solar farm", d:"150 MW renewable", run(){
+    C.SOLAR.installed=true; C.SOLAR.closed=true; C.SOLAR.avail=135; C.SOLAR.out=135;
+    return ["Solar farm connected (135 MW)","Solar now injects straight into the 220 kV bus, so less has to be imported from the grid and the renewable share rises."]; }},
+ {id:"add_bess",  cls:"v", t:"🔋 Build battery storage", d:"100 MW / 4 h", run(){
+    C.BESS.installed=true; C.BESS.closed=true; C.BESS.set=0; C.BESS.soc=60;
+    return ["Battery storage connected (100 MW)","The battery can now charge when there is surplus renewable power and discharge at peak — use the slider, + discharges, − charges."]; }},
+ {id:"add_gas",   cls:"r", t:"🔥 Build a gas peaker", d:"180 MW non-renewable", run(){
+    C.GAS.installed=true; C.GAS.closed=true; C.GAS.avail=180; C.GAS.out=0;
+    return ["Gas peaking unit connected (180 MW)","Dispatchable but non-renewable. Useful when wind and solar fall short — but it pushes the renewable share down."]; }},
+ {id:"wind_up",   cls:"g", t:"💨 Wind surge", d:"resource up to 200 MW", run(){
+    C.WIND.avail=200; C.WIND.out=200;
+    return ["Wind surged to 200 MW","Plenty of renewable power. If local generation now exceeds demand, the station starts EXPORTING to the grid — look at the 400 kV conductors, the flow arrows reverse."]; }},
+ {id:"wind_dn",   cls:"r", t:"🍃 Wind lull", d:"resource down to 30 MW", run(){
+    C.WIND.avail=30; C.WIND.out=30;
+    return ["Wind dropped to 30 MW","Renewable output collapses. The shortfall has to be met from the grid, the battery, or gas."]; }},
+ {id:"sun_set",   cls:"r", t:"🌇 Sunset", d:"solar to zero", run(){
+    C.SOLAR.avail=0; C.SOLAR.out=0;
+    return ["Solar output fell to zero","Evening: solar stops just as demand rises. This is exactly when a battery or peaker earns its keep."]; }},
+
+ {g:"Neighbouring stations"},
+ {id:"imp_n", cls:"g", t:"⬅️ Import from Ardnagreany", d:"+150 MW from the north", run(){
+    C.TIE_N.closed=true; C.TIE_N.set=150;
+    return ["Importing 150 MW from Ardnagreany","A neighbouring station is sharing its surplus with us. That power arrives on the 220 kV bus, so less is needed from the national grid."]; }},
+ {id:"exp_s", cls:"v", t:"➡️ Export to Ballyduff", d:"−120 MW to the south", run(){
+    C.TIE_S.closed=true; C.TIE_S.set=-120;
+    return ["Exporting 120 MW to Ballyduff","We are now helping a neighbouring station. That export is extra demand on Clonmore — it flows out through T3 and the 110 kV bus."]; }},
+ {id:"nbr_off", cls:"r", t:"⛔ Stop sharing", d:"both neighbour ties to zero", run(){
+    C.TIE_N.set=0; C.TIE_S.set=0;
+    return ["Neighbour sharing stopped","Both tie-lines are back to zero. Clonmore now stands on its own local generation plus the national grid."]; }},
+
+ {g:"Network events &amp; faults"},
+ {id:"peak", cls:"", t:"📈 Evening demand peak", d:"+180 MW on the town", run(){
+    C.LD_TOWN.mw+=180;
+    return ["Evening peak — demand up 180 MW","Everyone is home. Both transformers load up and warm; balance it with renewables, storage, a peaker, or by importing from a neighbour."]; }},
+ {id:"split", cls:"r", t:"🔀 NI ⇄ ROI system split", d:"all-island separation", run(){
+    SYS.coupled=false; C.TIE_NI.closed=false; SYS.shock=0.22;
+    return ["All-island system split","Ireland and Northern Ireland have separated. The cross-border tie opens, the NI estate is no longer fed from here, and the power that was going there suddenly has nowhere to go — frequency rises until the balance is restored."]; }},
+ {id:"n1", cls:"r", t:"⚡ N-1: sudden loss of T1", d:"protection trip", run(){
+    C.T1.tripped=true; C.T1.closed=true; C.T1.closed=false;
+    return ["Transformer T1 tripped","T1 is gone without warning, so T2 has to carry the entire station on its own. Relieve it fast — bring in local generation, import from a neighbour, or shed load, before T2 overloads too."]; }},
+ {id:"busfault", cls:"r", t:"🔌 220 kV bus earth fault", d:"protection operates", run(){
+    SYS.busFault=true;
+    return ["Earth fault on the 220 kV bus","Bus protection has de-energised the 220 kV busbar. Everything fed from it — the town, the new estate and the NI tie — is off supply until the fault is confirmed clear and the bus re-energised."]; }},
+ {id:"cool_fail", cls:"r", t:"🌡️ T1 cooling-pump failure", d:"thermal runaway risk", run(){
+    C.T1.drift=26;
+    return ["T1 cooling pump failed","Heat is no longer being carried away from T1. Its temperature will climb toward the trip threshold unless you reduce its load or start forced cooling."]; }},
+ {id:"storm", cls:"r", t:"⛈️ Storm front", d:"wind surge + lightning trip", run(){
+    SYS.storm=26; C.WIND.avail=195; C.WIND.out=195;
+    setTimeout(()=>{ if(SYS.storm>0){ C.T2.tripped=true; C.T2.closed=false;
+      toast("⚡ Lightning strike — T2 tripped","A direct strike operated T2's protection. T1 is now carrying everything while the wind is still high.",true,[]); } },6000);
+    return ["Storm front arriving","Wind generation surges while lightning threatens the plant. A storm stresses the station both ways at once — too much generation, and equipment dropping out."]; }},
+
+ {g:"Reset"},
+ {id:"reset", cls:"g", t:"↺ Reset to baseline", d:"back to a normal day", run(){
+    SYS.gridHealthy=true; SYS.busFault=false; SYS.coupled=true; SYS.shedMW=0; SYS.storm=0; SYS.shock=0; SYS.reliability=100; SYS.freq=50;
+    ["T1","T2","T3"].forEach(id=>{ const c=C[id]; c.tripped=false; c.closed=true; c.cool=false; c.drift=0; c.temp=30; c._ot=0; });
+    C.GRID.closed=true; C.BUS220.closed=true;
+    C.WIND.avail=160; C.WIND.out=120; C.WIND.closed=true;
+    C.SOLAR.installed=false; C.SOLAR.out=0; C.SOLAR.avail=0;
+    C.GAS.installed=false; C.GAS.out=0;
+    C.BESS.installed=false; C.BESS.set=0; C.BESS.soc=55;
+    C.LD_TOWN.mw=480; C.LD_TOWN.closed=true;
+    C.LD_NEW.installed=false; C.LD_NEW.mw=0;
+    C.LD_IND.mw=140; C.LD_IND.closed=true;
+    C.TIE_NI.mw=60; C.TIE_NI.closed=true; C.TIE_NI.tripped=false;
+    C.TIE_N.set=0; C.TIE_N.closed=true; C.TIE_S.set=0; C.TIE_S.closed=true;
+    return ["Reset to baseline","Normal day: 480 MW town demand, 140 MW industry, 60 MW exported to the NI estate, and 120 MW of wind. Everything else is available to build."]; }},
+];
+function renderScenarios(){
+  let h="", n=0;
+  SCEN.forEach(s=>{ if(s.g){ h+=`<div class="sgrp">${s.g}</div>`; return; }
+    n++; h+=`<button class="scn ${s.cls||''}" data-s="${s.id}">${s.t}<small>${s.d}</small></button>`; });
+  $("scnList").innerHTML=h; $("scnCount").textContent=n+" scenarios";
+  $("scnList").querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>{
+    const s=SCEN.find(x=>x.id===b.dataset.s); if(!s) return;
+    const before=snap(); const [title,detail]=s.run();
+    solve(0.4); toast(title, detail, /fault|trip|split|lull|sunset|storm|stop/i.test(s.id), deltas(before));
+    renderControls(); renderInspector(); });
+}
+
+/* ---------- header balance bar ---------- */
+function renderHeader(){
+  const mx=Math.max(R.supply,R.demand,1);
+  const fill=(el,parts)=>{ el.innerHTML = parts.map(p=>{
+      const w=(p.v/mx*100); return `<span class="bseg" style="width:${w}%;background:${p.col}" title="${p.k} ${fmt(p.v)} MW">${w>11?fmt(p.v):""}</span>`; }).join(""); };
+  fill($("supBar"),R.parts.sup); fill($("demBar"),R.parts.dem);
+  $("supVal").textContent=fmt(R.supply)+" MW";
+  $("demVal").textContent=fmt(R.demand)+" MW";
+  const d=R.supply-R.demand;
+  const bv=$("balV");
+  if(Math.abs(R.unbal)>1){ bv.textContent=(R.unbal>0?"SHORT ":"SURPLUS ")+fmt(Math.abs(R.unbal))+" MW"; bv.style.color="#ff5d6c"; }
+  else { bv.textContent="BALANCED"; bv.style.color="#3ddc84"; }
+  $("hRen").textContent=fmt(R.renewPct)+" %";
+  $("hRen").style.color=R.renewPct>50?"#3ddc84":R.renewPct>25?"#ffb340":"#ff8b5e";
+  $("hFreq").textContent=fmt(SYS.freq,2)+" Hz";
+  $("hFreq").style.color=Math.abs(SYS.freq-50)>0.2?"#ff5d6c":Math.abs(SYS.freq-50)>0.1?"#ffb340":"#3ddc84";
+  $("hMode").textContent=SYS.mode;
+  $("hMode").style.color=SYS.mode==="NORMAL"?"#3ddc84":SYS.mode==="ALERT"?"#ffb340":"#ff5d6c";
+}
+
+/* ---------- main loop ---------- */
+let last=0, sldTick=0, inspTick=0;
+function frame(ts){
+  const dt=Math.min(0.25,(ts-last)/1000||0.016); last=ts; T=ts;
+  if(SYS.storm>0) SYS.storm-=dt;
+  solve(dt);
+  renderHeader();
+  yard.draw(); net.draw();
+  if(ts-sldTick>180){ sld.draw(); sldTick=ts; }
+  if(ts-inspTick>500){ if(UI.sel) renderInspector(); inspTick=ts; }
+  requestAnimationFrame(frame);
+}
+function fitAll(){ yard.fit(); net.fit(); }
+window.addEventListener("resize",fitAll);
+window.addEventListener("keydown",e=>{ if(e.key==="Escape"){ UI.sel=null; renderInspector(); } });
+
+fitAll(); renderScenarios(); renderControls(); renderInspector();
+solve(0.4); renderHeader(); sld.draw();
+toast("Clonmore station twin is live",
+  "Three synchronised views of one station: the physical yard, the wider network with its neighbouring stations, and the single-line circuit. Click any component in any view to select and control it — then try a scenario on the left.",
+  false, []);
+requestAnimationFrame(frame);
+
+
+</script>
+</body>
+</html>
