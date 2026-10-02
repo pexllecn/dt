@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm ci && npm --prefix station-twin ci",
+  "buildCommand": "npm run build && npm --prefix station-twin run build -- --outDir ../dist/station-twin",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/station-twin", "destination": "/station-twin/index.html" },
+    { "source": "/station-twin/", "destination": "/station-twin/index.html" }
+  ]
+}
