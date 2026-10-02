@@ -1,0 +1,23 @@
+{
+  "name": "clonmore-station-twin",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Cognitive Grid Twin: Clonmore (fictional) 400/275/220/110 kV station twin",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "fixtures": "node tests/parity/generate-fixtures.mjs",
+    "e2e": "node tests/e2e/file-protocol.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "playwright-core": "1.56.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.2",
+    "vite-plugin-singlefile": "2.3.3",
+    "vitest": "5.0.3"
+  }
+}
