@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three/webgpu';
 import {
-  emissive, float, materialOpacity, mix, mrt, output, pass, renderOutput, saturation, screenUV, uniform, vec3, vec4, velocity,
+  emissive, float, materialOpacity, mix, mrt, output, pass, renderOutput, saturation, screenUV, smoothstep, uniform, vec2, vec3, vec4, velocity,
 } from 'three/tsl';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
@@ -98,6 +98,7 @@ export class Stage {
   private shadowDir = new THREE.Vector3();
   private lastFrameAt = 0;
   private envBakedAt = -Infinity;
+  private envStorm = false;
   private envTheme: Theme | null = null;
   /** Frame times (ms) since the last call to takeFrameTimes, for the bench. */
   private frameTimes: number[] = [];
@@ -106,6 +107,14 @@ export class Stage {
   preview: SimState | null = null;
   /** Fades the physical scene during the fold (dithered alpha, no sorting artefacts). */
   private sceneFade = uniform(1);
+  /**
+   * Opaque materials that dissolve during the fold. Alpha hashing is switched on only while the
+   * fold runs: a shader that can discard pixels disables early depth rejection, and on Apple's
+   * tile-based GPUs hidden-surface removal, so leaving it on made every pixel of every layer shade.
+   */
+  private fadeMats: THREE.Material[] = [];
+  private fadeOn = false;
+  private yardGroup: THREE.Object3D | null = null;
   private circuitU = uniform(0);
   private physPose: Pose | null = null;
   private moveStart: { pose: Pose; p: number; target: 0 | 1 } | null = null;
@@ -186,6 +195,7 @@ export class Stage {
     this.weather = new WeatherFx(this.station.anchors);
     this.scene.add(this.weather.group);
     // Every physical material can dissolve during the fold.
+    this.yardGroup = yard.group;
     this.terrain = yard.group.children.filter((o) => (o as THREE.Mesh).material === this.materials.grass);
     const seen = new Set<THREE.Material>();
     for (const root of [yard.group, this.station.group, this.surroundings.group]) root.traverse((o) => {
@@ -196,7 +206,7 @@ export class Stage {
         if (seen.has(mat) || mat === this.materials.grass) continue;
         seen.add(mat);
         if (mat.transparent) mat.opacityNode = materialOpacity.mul(this.sceneFade);
-        else { mat.alphaHash = true; mat.opacityNode = this.sceneFade; }
+        else { mat.opacityNode = this.sceneFade; this.fadeMats.push(mat); }
       }
     });
     this.scene.fog = new THREE.FogExp2(0xc9d3dc, 0.00007);
@@ -263,7 +273,10 @@ export class Stage {
       : smaa(beauty);
     // The Circuit lens shows the diagram's exact colours: no tone mapping once the fold has resolved.
     pipeline.outputColorTransform = false;
-    pipeline.outputNode = mix(renderOutput(aa, THREE.AgXToneMapping, THREE.SRGBColorSpace), renderOutput(aa, THREE.NoToneMapping, THREE.SRGBColorSpace), this.circuitU);
+    // A soft lens vignette on the 3D view (not on the diagram), as a camera would record it.
+    const vignette = float(1).sub(smoothstep(float(0.35), float(0.95), screenUV.sub(0.5).mul(vec2(1.0, 0.8)).length().mul(1.35)).mul(0.22));
+    const framed = vec4((aa as unknown as THREE.Node<"vec4">).rgb.mul(vignette), 1);
+    pipeline.outputNode = mix(renderOutput(framed, THREE.AgXToneMapping, THREE.SRGBColorSpace), renderOutput(aa, THREE.NoToneMapping, THREE.SRGBColorSpace), this.circuitU);
     this.pipeline = pipeline;
   }
 
@@ -540,6 +553,14 @@ export class Stage {
     if (wasMoving || c.moving) this.applyFoldCamera();
     const d = c.dissolve();
     this.sceneFade.value = 1 - d;
+    const fading = d > 0 && d < 1;
+    if (fading !== this.fadeOn) {
+      this.fadeOn = fading;
+      for (const m of this.fadeMats) { m.alphaHash = fading; m.needsUpdate = true; }
+    }
+    // Fully folded: the physical scene is not drawn at all (it was fully dissolved before).
+    this.station.group.visible = d < 1;
+    if (this.yardGroup) this.yardGroup.visible = d < 1;
     // The diagram's exact colours as soon as the paper is down (tone mapping off).
     this.circuitU.value = ease((p - 0.08) / 0.22);
     this.grade.value = (this.theme === 'control' ? 1 : 0) * (1 - d);
@@ -718,8 +739,11 @@ export class Stage {
       this.updateFold(wasMoving);
     }
     // During time-lapse the sun moves quickly: bake at most every two seconds (the sky keys are coarse anyway).
-    if (this.needsEnv && (this.capture || this.time - this.envBakedAt > 2 || this.envTheme !== this.theme)) {
-      this.bakeEnvironment(); this.needsEnv = false; this.envBakedAt = this.time; this.envTheme = this.theme;
+    // The environment light is soft (a fifth of the sun's), and a bake renders dozens of passes:
+    // follow the sun at most every 20 s, but at once for a theme or storm change.
+    const storm = !!this.state?.weather.storm;
+    if (this.needsEnv && (this.capture || this.time - this.envBakedAt > 20 || this.envTheme !== this.theme || this.envStorm !== storm)) {
+      this.bakeEnvironment(); this.needsEnv = false; this.envBakedAt = this.time; this.envTheme = this.theme; this.envStorm = storm;
     }
     if (this.state && this.renderer.shadowMap.enabled) this.updateShadows();
     if (this.selectionRing?.visible) {
