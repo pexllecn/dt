@@ -1,7 +1,7 @@
 import { lonLatToItm } from '@/lib/geo';
 import { useWorld } from '@/app/store';
 import { useSim } from '@/sim/client';
-import { topCorridors, type Corridor } from '@/sim/corridors';
+import type { Corridor } from '@/sim/corridors';
 import type { ScenarioId } from '@/sim/scenarios';
 import { useUi } from '@/ui/uiStore';
 import type { Shot } from './camera';
@@ -82,9 +82,9 @@ const ensureStudy = () => {
 };
 
 export function corridors(): Corridor[] {
-  const { day, meta, inputs } = sim();
-  if (!day || !meta || inputs.scenario !== 'y2034' || (inputs.year ?? 2034) < 2034) return [];
-  return topCorridors(day, meta);
+  const { corridors: list, inputs } = sim();
+  if (!list || inputs.scenario !== 'y2034' || (inputs.year ?? 2034) < 2034) return [];
+  return list;
 }
 
 const corridorBeat = (k: number): Beat => ({
@@ -99,7 +99,7 @@ const corridorBeat = (k: number): Beat => ({
   hold: 8,
   enter: () => {
     const c = corridors()[k];
-    if (c) select(c.label);
+    if (c) ui().set({ selectedBranch: c.branch, selectedAgent: null });
   },
   caption: () => {
     const c = corridors()[k];
@@ -506,8 +506,8 @@ export const scripts: Record<ScenarioId, Script> = {
           sim().setInputs({ year: 2034 });
           select(null);
         },
-        caption: 'Five corridors carry most of the strain, measured as energy above rating after any single fault.',
-        narration: 'Five corridors carry most of the strain.',
+        caption: 'Five corridors take most of the strain that growth adds, measured as energy above rating after any single fault.',
+        narration: 'Five corridors take most of the extra strain.',
       },
       corridorBeat(0),
       corridorBeat(1),

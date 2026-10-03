@@ -72,7 +72,7 @@ export function Inspector() {
   return (
     <section
       className="absolute top-24 z-20 max-h-[calc(100%-260px)] w-[320px] overflow-y-auto border hairline px-5 pb-4 pt-4 backdrop-blur-md transition-[right] duration-500"
-      style={{ background: 'var(--panel)', right: ui.feedOpen ? 448 : 32 }}
+      style={{ background: 'var(--panel)', right: ui.feedOpen ? 448 : 32, maxHeight: ui.narrationOn ? 'calc(100% - 460px)' : undefined }}
       aria-label="Asset inspector"
     >
       <div className="flex items-baseline justify-between">

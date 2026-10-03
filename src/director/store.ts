@@ -10,8 +10,6 @@ export interface DirectorState {
   playing: boolean;
   /** Bumped on every beat entry so the Director re-applies it even for the same index. */
   seq: number;
-  /** Seconds spent in the current beat while playing. */
-  elapsed: number;
   /** A beat that waits for a person (an approval) holds here. */
   waiting: boolean;
   set(patch: Partial<DirectorState>): void;
@@ -32,9 +30,8 @@ export const useDirector = create<DirectorState>((set, get) => ({
   beat: Number(q.get('beat') ?? 0),
   playing: q.has('play'),
   seq: 0,
-  elapsed: 0,
   waiting: false,
   set: (patch) => set(patch),
-  go: (beat) => set({ beat, seq: get().seq + 1, elapsed: 0, waiting: false }),
-  load: (script, beat = 0) => set({ script, beat, seq: get().seq + 1, elapsed: 0, waiting: false }),
+  go: (beat) => set({ beat, seq: get().seq + 1, waiting: false }),
+  load: (script, beat = 0) => set({ script, beat, seq: get().seq + 1, waiting: false }),
 }));

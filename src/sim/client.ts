@@ -4,6 +4,7 @@ import type { AgentDay } from '@/agents/engine';
 import type { FromWorker, ModelMeta, SimInputs, ToWorker } from './protocol';
 import { scenarios, type ScenarioId } from './scenarios';
 import type { StudyBundle } from './studies';
+import type { Corridor } from './corridors';
 
 export interface SimState {
   meta: ModelMeta | null;
@@ -16,6 +17,8 @@ export interface SimState {
   trip(branchId: string): void;
   restore(branchId: string): void;
   study: StudyBundle | null;
+  /** 2034 only: corridors ranked by the strain growth adds. */
+  corridors: Corridor[] | null;
   studyRunning: boolean;
   /** Run the connection studies for new demand at a bus (results arrive in `study`). */
   runStudy(bus: string, requestMW: number, rangeMW: number): void;
@@ -47,6 +50,7 @@ export const useSim = create<SimState>((set, get) => ({
   computeMs: 0,
   error: null,
   study: null,
+  corridors: null,
   studyRunning: false,
   runStudy(bus, requestMW, rangeMW) {
     set({ studyRunning: true });
@@ -100,7 +104,7 @@ export function startSimulation(): void {
       const policy = q.get('policy');
       if (policy === 'availability' || policy === 'consistency') useSim.getState().setInputs({ stalePolicy: policy });
     }
-    else if (m.type === 'day') useSim.setState({ day: m.day, agents: m.agents, computeMs: m.ms });
+    else if (m.type === 'day') useSim.setState({ day: m.day, agents: m.agents, corridors: m.corridors, computeMs: m.ms });
     else if (m.type === 'study') useSim.setState({ study: m.bundle, studyRunning: false });
     else if (m.type === 'error') {
       console.error('simulation:', m.message);

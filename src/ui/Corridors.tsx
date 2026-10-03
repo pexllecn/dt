@@ -1,23 +1,20 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { project } from '@/app/bridge';
 import { useSim } from '@/sim/client';
-import { topCorridors } from '@/sim/corridors';
 import { SourceTag } from './SourceTag';
 import { useUi } from './uiStore';
 
 function useCorridors() {
-  const day = useSim((s) => s.day);
-  const meta = useSim((s) => s.meta);
+  const corridors = useSim((s) => s.corridors);
   const inputs = useSim((s) => s.inputs);
   const show = inputs.scenario === 'y2034' && (inputs.year ?? 2034) >= 2034;
-  return useMemo(() => (show && day && meta ? topCorridors(day, meta) : []), [show, day, meta]);
+  return useMemo(() => (show && corridors ? corridors : []), [show, corridors]);
 }
 
 /** 2034: the five most constrained corridors, ranked by energy above rating after a single fault. */
 export function CorridorsPanel() {
   const list = useCorridors();
   const ui = useUi();
-  const meta = useSim((s) => s.meta);
   const dcShare = useSim((s) => (s.day ? Math.max(...s.day.series.dcShare) : 0));
   if (!list.length) return null;
   return (
@@ -31,11 +28,11 @@ export function CorridorsPanel() {
         <SourceTag s="Synthetic" />
       </div>
       <p className="mt-1 text-[11px] leading-snug text-ink-soft">
-        Data centre share {Math.round(dcShare * 100)}% of demand. Ranked by energy above rating over the day, after any single fault; overloads with nothing out count double.
+        Data centre share {Math.round(dcShare * 100)}% of demand. Ranked by the strain growth adds since 2026: energy above rating over the day, after any single fault, with overloads with nothing out counted double.
       </p>
       <ol className="mt-2">
         {list.map((c) => {
-          const sel = meta?.branches.find((b) => b.label === c.label)?.id === ui.selectedBranch;
+          const sel = !!ui.selectedBranch && c.branches.includes(ui.selectedBranch);
           return (
             <li key={c.branch} className="border-t hairline py-1.5">
               <button

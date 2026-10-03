@@ -2,6 +2,7 @@ import type { ScenarioId } from './scenarios';
 import type { DayResult } from './engine';
 import type { AgentDay, AgentInfo } from '@/agents/engine';
 import type { StudyBundle } from './studies';
+import type { Corridor } from './corridors';
 
 export interface SimInputs {
   scenario: ScenarioId;
@@ -55,6 +56,6 @@ export type ToWorker =
 
 export type FromWorker =
   | { type: 'ready'; meta: ModelMeta; ms: number }
-  | { type: 'day'; day: DayResult; agents: Omit<AgentDay, 'agents'>; inputs: SimInputs; ms: number }
+  | { type: 'day'; day: DayResult; agents: Omit<AgentDay, 'agents'>; corridors: Corridor[] | null; inputs: SimInputs; ms: number }
   | { type: 'study'; bundle: StudyBundle }
   | { type: 'error'; message: string };

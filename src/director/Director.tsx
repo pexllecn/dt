@@ -10,6 +10,8 @@ import { useDirector } from './store';
  * and flies the camera; while playing it runs the clock to the beat's end time, holds, waits for
  * a person where the beat needs one, and moves on.
  */
+const clock = { seq: -1, elapsed: 0 };
+
 export function DirectorRuntime() {
   const mode = useDirector((s) => s.mode);
   const script = useDirector((s) => s.script);
@@ -64,21 +66,24 @@ export function DirectorRuntime() {
       const sc = scripts[d.script];
       const b = sc.beats[d.beat];
       if (!b) return;
-      const elapsed = d.elapsed + dt;
+      // The beat clock lives outside React state: writing it every frame would re-render.
+      if (clock.seq !== d.seq) {
+        clock.seq = d.seq;
+        clock.elapsed = 0;
+      }
+      clock.elapsed += dt;
+      const elapsed = clock.elapsed;
       if (b.timeTo !== undefined) {
         const f = Math.min(1, elapsed / b.hold);
         useWorld.getState().setHours(startHours.current + (b.timeTo - startHours.current) * f);
       }
-      if (elapsed < b.hold) {
-        useDirector.setState({ elapsed });
-        return;
-      }
+      if (elapsed < b.hold) return;
       if (b.waitFor && !b.waitFor()) {
-        if (!d.waiting) useDirector.setState({ waiting: true, elapsed });
+        if (!d.waiting) useDirector.setState({ waiting: true });
         return;
       }
       if (d.beat + 1 < sc.beats.length) d.go(d.beat + 1);
-      else useDirector.setState({ playing: false, elapsed: b.hold, waiting: false });
+      else useDirector.setState({ playing: false, waiting: false });
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
@@ -89,7 +94,12 @@ export function DirectorRuntime() {
 
 /** Lower third: script title, beat caption, progress and the presenter's keys. */
 export function DirectorBar() {
-  const d = useDirector();
+  const mode = useDirector((s) => s.mode);
+  const script = useDirector((s) => s.script);
+  const beat = useDirector((s) => s.beat);
+  const playing = useDirector((s) => s.playing);
+  const go = useDirector((s) => s.go);
+  const d = { mode, script, beat, playing, go };
   const [, tick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => tick((n) => n + 1), 500);

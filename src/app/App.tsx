@@ -30,6 +30,7 @@ import { bridge } from './bridge';
 import { useUi } from '@/ui/uiStore';
 import { CorridorLabels, CorridorsPanel } from '@/ui/Corridors';
 import { ToolDock } from '@/ui/ToolDock';
+import { Narration } from '@/ui/Narration';
 
 // Test and rehearsal hook: the stores, read-only by convention.
 Object.assign(window as unknown as Record<string, unknown>, { __twin: { useWorld, useSim, useUi, useDirector, bridge } });
@@ -89,6 +90,7 @@ export function App() {
           <CorridorsPanel />
           <CorridorLabels />
           <ToolDock />
+          <Narration />
           <Toast />
           <Notes />
           <AgentFeed />

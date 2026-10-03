@@ -54,7 +54,7 @@ export function useKeys() {
           break;
         case 'd':
           if (director) dir.set({ mode: 'explore', playing: false });
-          else dir.set({ mode: 'director', script: sim.inputs.scenario, beat: 0, seq: dir.seq + 1, elapsed: 0, playing: false });
+          else dir.set({ mode: 'director', script: sim.inputs.scenario, beat: 0, seq: dir.seq + 1, playing: false });
           break;
         case '`':
           s.toggleDebug();

@@ -15,6 +15,9 @@ const CONDITION_INPUTS = new Set([
   'c2h2Rate',
 ]);
 
+/** Share of the new demand a circuit must carry for its findings to become conditions precedent. */
+export const PRECEDENT_SHARE = 0.15;
+
 export interface OfferCondition {
   kind: 'precedent' | 'operational' | 'non-firm';
   text: string;
@@ -53,7 +56,8 @@ export function deriveOffer(bundle: StudyBundle, offeredMW: number, trace: Trace
   const mainFeedMinMW = mainFeed ? Math.min(...mainFeed.firmMW) : bundle.requestMW;
   const conditions: OfferCondition[] = [];
 
-  const affected = new Set(bundle.affected.map((a) => a.id));
+  // Local circuits only: those carrying at least 15% of the new demand.
+  const affected = new Set(bundle.affected.filter((a) => a.share >= PRECEDENT_SHARE).map((a) => a.id));
   const ruleById = new Map(allRules.map((r) => [r.id, r]));
   const seen = new Set<string>();
   for (const t of trace) {

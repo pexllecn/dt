@@ -316,8 +316,14 @@ export function EvidencePack() {
         <h3 className="mt-4 text-[10px] uppercase tracking-[0.16em] text-ink-soft">4. Result</h3>
         <p>
           Firm in every studied interval up to <span className="figure">{Math.floor(study.firmAllMW)} MW</span>
-          {study.topConstraint >= 0 && study.firmAllMW < study.requestMW ? <>, limited by {study.constraints[study.topConstraint]!.label}</> : null}. Relieving that constraint
-          (for example by uprating) would raise the firm level to about <span className="figure">{Math.floor(study.firmIfRelievedMW)} MW</span> (indicative).
+          {study.topConstraint >= 0 && study.firmAllMW < study.requestMW ? <>, limited by {study.constraints[study.topConstraint]!.label}</> : null}.{' '}
+          {study.firmIfRelievedMW - study.firmAllMW >= 2 ? (
+            <>
+              Relieving that constraint (for example by uprating) would raise the firm level to about <span className="figure">{Math.floor(study.firmIfRelievedMW)} MW</span> (indicative).
+            </>
+          ) : study.firmAllMW < study.requestMW ? (
+            <>Relieving that circuit alone would not help: the circuits in series with it bind at the same level, so reinforcement would need the corridor as a whole.</>
+          ) : null}
         </p>
         <p className="mt-1">
           Offer at <span className="figure">{dial} MW</span>: <span className="figure">{Math.floor(offer.firmMW)} MW</span> firm

@@ -4,6 +4,8 @@ import { AgentEngine } from '@/agents/engine';
 import { RULESET_VERSION, ruleSetHash } from '@/agents/rules';
 import { scenarios } from './scenarios';
 import { runConnectionStudies } from './studies';
+import { topCorridors } from './corridors';
+import type { DayResult } from './engine';
 import type { FromWorker, ModelMeta, SimInputs, ToWorker } from './protocol';
 import type { NetworkBundle } from './types';
 
@@ -14,6 +16,9 @@ import type { NetworkBundle } from './types';
  */
 let engine: Engine | null = null;
 let agentEngine: AgentEngine | null = null;
+let meta: ModelMeta | null = null;
+/** Base (2026 demand) day for the 2034 corridor comparison, cached by the other inputs. */
+let baseDay: { key: string; day: DayResult } | null = null;
 const post = (m: FromWorker, transfer: Transferable[] = []) => (self as DedicatedWorkerGlobalScope).postMessage(m, transfer);
 
 function run(inputs: SimInputs) {
@@ -59,6 +64,13 @@ function run(inputs: SimInputs) {
     (s) => engine!.outagesAt(engineInputs, s),
     { year: engineInputs.year },
   );
+  // 2034: rank corridors by the strain growth adds, against the same day at 2026 demand.
+  let corridors = null;
+  if (inputs.scenario === 'y2034' && meta && engineInputs.year > 2026) {
+    const key = JSON.stringify({ ...engineInputs, year: 0, wind: inputs.windScale });
+    if (!baseDay || baseDay.key !== key) baseDay = { key, day: engine.runDay({ ...engineInputs, year: 2026 }) };
+    corridors = topCorridors(day, meta, 5, baseDay.day);
+  }
   const { agents: _agentList, ...agents } = agentDay;
   void _agentList;
   const buffers = [
@@ -74,7 +86,7 @@ function run(inputs: SimInputs) {
     ...Object.values(day.series).map((a) => a.buffer),
   ] as ArrayBuffer[];
   buffers.push(agents.level.buffer as ArrayBuffer, agents.levelBase.buffer as ArrayBuffer, agents.confidence.buffer as ArrayBuffer);
-  post({ type: 'day', day, agents, inputs, ms: performance.now() - t0 }, buffers);
+  post({ type: 'day', day, agents, corridors, inputs, ms: performance.now() - t0 }, buffers);
 }
 
 self.onmessage = async (ev: MessageEvent<ToWorker>) => {
@@ -91,7 +103,7 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       engine = new Engine({ network, allocation, plants } as NetworkBundle);
       agentEngine = new AgentEngine(engine);
       const m = engine.model;
-      const meta: ModelMeta = {
+      meta = {
         branches: m.branches.map((b) => {
           const ca = m.buses[b.from]!.country;
           const cb = m.buses[b.to]!.country;
