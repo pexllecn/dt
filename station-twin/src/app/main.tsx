@@ -21,6 +21,7 @@ import { AuditPanel, clientRef, Feed, RecommendationCard } from '../ui/Agents.ts
 import { CommandPalette, Sankey, Timeline, TourCaption } from '../ui/Presenter.tsx';
 import { BEATS } from '../tour/tour.ts';
 import { TopStrip } from '../ui/TopStrip.tsx';
+import { toggleFullscreen } from './fullscreen.ts';
 import { localClient, workerClient, type SimClient } from './client.ts';
 import { agents, auditOpen, logOpen, paletteOpen, sankeyOpen, tour, clock, confirmReq, debugOpen, dockOpen, hovered, lens, methodOpen, previews, selected, snap, theme, toast } from './store.ts';
 
@@ -203,7 +204,7 @@ async function boot(): Promise<void> {
       case 'd': case 'D': debugOpen.value = !debugOpen.value; break;
       case 'm': case 'M': methodOpen.value = !methodOpen.value; break;
       case 'h': case 'H': selected.value = null; stage.overview(); break;
-      case 'f': case 'F': if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen(); break;
+      case 'f': case 'F': toggleFullscreen(); break;
       case 'r': case 'R': confirmReq.value = { title: 'Reset to baseline?', body: 'The station returns to 12:00 on a normal day.', action: 'Reset', run: () => void client.command({ type: 'scenario', id: 'reset' }).then((r) => (toast.value = { result: r, key: Date.now() })) }; break;
       case 'Escape': if (sankeyOpen.value) sankeyOpen.value = false; else if (auditOpen.value) auditOpen.value = false; else if (methodOpen.value) methodOpen.value = false; else selected.value = null; break;
     }

@@ -15,6 +15,8 @@ let engine = twin.engine;
 let previewFor: string | null = null;
 let runner: TourRunner | null = null;
 let tourWall = new Date().toISOString();
+/** The agent view last posted: it is only sent again when it changes. */
+let lastAgents = '';
 
 /** Apply the beat's clock: its compression, paused when it waits for the presenter. */
 function beatClock(): void {
@@ -37,7 +39,11 @@ function snapshot(): void {
   const state = engine.snapshot();
   // Keep only the latest frequency transient series to limit message size.
   state.frequency.events = state.frequency.events.map((ev, i, all) => (i === all.length - 1 ? ev : { ...ev, series: [] }));
-  post({ type: 'snapshot', state, clock: { ...clock }, hash: null, agents: twin.view(), tour: runner ? runner.status(twin) : null });
+  const view = twin.view();
+  const key = JSON.stringify(view);
+  const agents = key === lastAgents ? null : view;
+  lastAgents = key;
+  post({ type: 'snapshot', state, clock: { ...clock }, hash: null, agents, tour: runner ? runner.status(twin) : null });
   const p = twin.previews();
   if (p.forRec !== previewFor) { previewFor = p.forRec; post({ type: 'previews', forRec: p.forRec, states: p.states }); }
 }

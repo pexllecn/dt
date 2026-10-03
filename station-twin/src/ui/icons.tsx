@@ -30,6 +30,8 @@ const P: Record<string, string> = {
   panel: 'M3 4h18v16H3zM9 4v16',
   home: 'M3 11l9-7 9 7M5 9v11h14V9',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.5M3 12h.5M3 18h.5',
+  maximise: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5',
+  minimise: 'M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5',
   focus: 'M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5M12 15a3 3 0 100-6 3 3 0 000 6z',
 };
 

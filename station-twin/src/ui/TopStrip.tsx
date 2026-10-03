@@ -5,6 +5,7 @@ import { clockLabel, compressionLabel } from '../lib/format.ts';
 import { clock, lens, methodOpen, sankeyOpen, snap, theme, tour } from '../app/store.ts';
 import type { SimClient } from '../app/client.ts';
 import { Icon } from './icons.tsx';
+import { fullscreen, fullscreenSupported, toggleFullscreen } from '../app/fullscreen.ts';
 
 export function TopStrip({ client }: { client: SimClient }) {
   const s = snap.value;
@@ -71,6 +72,11 @@ export function TopStrip({ client }: { client: SimClient }) {
       <button class={`iconbtn ${theme.value === 'control' ? 'on' : ''}`} style={{ marginLeft: '6px' }} title="Theme: Daylight or Control Room (T)" aria-label="Toggle theme" onClick={() => (theme.value = theme.value === 'daylight' ? 'control' : 'daylight')}>
         <Icon name={theme.value === 'control' ? 'moon' : 'sun'} />
       </button>
+      {fullscreenSupported && (
+        <button class={`iconbtn ${fullscreen.value ? 'on' : ''}`} style={{ marginLeft: '6px' }} title={fullscreen.value ? 'Exit full screen (F)' : 'Full screen (F)'} aria-label={fullscreen.value ? 'Exit full screen' : 'Full screen'} aria-pressed={fullscreen.value} onClick={toggleFullscreen}>
+          <Icon name={fullscreen.value ? 'minimise' : 'maximise'} />
+        </button>
+      )}
       {BRANDING.partnerLogo && <div class="partner"><img src={BRANDING.partnerLogo} alt={BRANDING.partnerName} /></div>}
     </div>
   );

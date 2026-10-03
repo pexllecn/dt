@@ -14,6 +14,7 @@ import type { FlowPath } from './station.ts';
 
 type F = THREE.UniformNode<'float', number>;
 const u = (v: number) => uniform(v) as unknown as F;
+const WHITE = new THREE.Color(0xffffff);
 
 export const VOLTAGE_COLOUR: Record<Voltage, number> = { 400: 0xff5a36, 275: 0xb07cff, 220: 0xffb02e, 110: 0x38c6ff };
 
@@ -207,7 +208,7 @@ export class FlowLayer {
       const ks = run.key;
       const L = run.cum[run.cum.length - 1]!;
       const moving = ks.velocity !== 0;
-      col.set(VOLTAGE_COLOUR[ks.voltage]).lerp(new THREE.Color(0xffffff), 0.35);
+      col.set(VOLTAGE_COLOUR[ks.voltage]).lerp(WHITE, 0.35);
       const period = run.count * run.spacing;
       for (let i = 0; i < run.count; i++) {
         const idx = run.first + i;

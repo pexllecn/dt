@@ -23,7 +23,7 @@ export type ToWorker =
   | { type: 'tour'; action: TourAction; wall: string };
 
 export type FromWorker =
-  | { type: 'snapshot'; state: SimState; clock: ClockState; hash: string | null; agents: AgentView; tour: TourStatus | null }
+  | { type: 'snapshot'; state: SimState; clock: ClockState; hash: string | null; agents: AgentView | null; tour: TourStatus | null }
   | { type: 'result'; id: number; result: CommandResult }
   | { type: 'decided'; id: number; ok: boolean; reason?: string }
   | { type: 'previews'; forRec: string | null; states: Record<string, unknown> };

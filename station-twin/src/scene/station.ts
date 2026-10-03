@@ -393,6 +393,10 @@ export function buildStation(materials: Materials): StationScene {
   const rot = new THREE.Matrix4();
   const OPEN = Math.PI / 2;
   const travel = OPEN / 3; // a quarter turn in about 3 s
+  const red = new THREE.Color(0xff2a1a);
+  const green = new THREE.Color(0x19d15a);
+  const amber = new THREE.Color(0xffa400);
+  const off = new THREE.Color(0x101010);
 
   function update(state: SimState, dt: number, time: number): void {
     const C = state.C;
@@ -417,10 +421,6 @@ export function buildStation(materials: Materials): StationScene {
       }
     }
     if (armMeshes[0]) armMeshes[0].mesh.userData.init = true;
-    const red = new THREE.Color(0xff2a1a);
-    const green = new THREE.Color(0x19d15a);
-    const amber = new THREE.Color(0xffa400);
-    const off = new THREE.Color(0x101010);
     for (const l of lampList) {
       const c = C[l.owner];
       const col2 = !c.installed ? off : c.tripped ? (Math.sin(time * 8) > 0 ? amber : off) : c.closed ? red : green;
