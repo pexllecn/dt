@@ -195,8 +195,19 @@ export function runConnectionStudies(engine: Engine, busId: string, request: num
     }
   });
 
+  // Share of the new demand each circuit carries, with the same balancing as the studies
+  // (the large synchronous units pro-rata), so the backbone near the reference bus is not
+  // credited with carrying it.
+  const pool = m.units.filter((u) => u.spec.large && intact.energised[u.bus]);
+  const poolCap = pool.reduce((a, u) => a + u.capacity, 0) || 1;
+  const carried = (l: number) => {
+    if (!intact.active[l]) return 0;
+    let supply = 0;
+    for (const u of pool) supply += (u.capacity / poolCap) * ptdf(intact, m.branches, l, u.bus);
+    return Math.abs(supply - ptdf(intact, m.branches, l, bus));
+  };
   const affected = m.branches
-    .map((b, l) => ({ id: b.id, label: b.label, share: intact.active[l] ? Math.abs(ptdf(intact, m.branches, l, bus)) : 0 }))
+    .map((b, l) => ({ id: b.id, label: b.label, share: carried(l) }))
     .filter((a) => a.share >= MIN_EFFECT)
     .sort((a, b) => b.share - a.share)
     .slice(0, 10)

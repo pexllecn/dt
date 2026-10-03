@@ -27,6 +27,7 @@ Status: complete. The performance figures are measured in this container (see be
   - **The Director's beat clock** lives outside React state, so playback causes no per-frame re-render.
   - **Clouds** cost two texture samples per pixel instead of six 3D noise evaluations.
   - **Adaptive resolution:** the pixel ratio drops in steps of 0.5 when the frame rate stays below 40 fps for 3 s, and returns after 12 s of headroom. `quality=fixed` turns it off; it is never on in `bench`.
+  - **No shader rebuilds mid-show.** The sky was re-baked into a new environment texture every 2 degrees of sun movement. A new texture object invalidates every lit material, so the whole scene's shaders were rebuilt every few seconds during any time-lapse or Director play (0.6 to 0.8 s stalls here). The bake now reuses one render target. Measured over 40 s of playback of each of the storm, today and 2034 scripts: no long tasks and no material builds. A warm-up frame at load builds the weather materials before they are first needed, and `?debugbuild` logs any material build with its object and time.
   - **Frame time** is clamped, so a background tab or clock change can't jump or reverse animation.
   - **The debug overlay** shows main-thread update and submit time per frame, the pixel ratio, draw calls and triangles.
 

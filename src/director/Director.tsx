@@ -7,8 +7,8 @@ import { useDirector } from './store';
 
 /**
  * Runs the current script in Director mode: on each beat it sets the clock, runs the beat's setup
- * and flies the camera; while playing it runs the clock to the beat's end time, holds, waits for
- * a person where the beat needs one, and moves on.
+ * and flies the camera, then runs the clock to the beat's end time. While playing it also holds,
+ * waits for a person where the beat needs one, and moves on.
  */
 const clock = { seq: -1, elapsed: 0 };
 
@@ -63,7 +63,7 @@ export function DirectorRuntime() {
       const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
       last = now;
       const d = useDirector.getState();
-      if (d.mode !== 'director' || !d.playing || !useWorld.getState().ready) return;
+      if (d.mode !== 'director' || !useWorld.getState().ready) return;
       const sc = scripts[d.script];
       const b = sc.beats[d.beat];
       if (!b) return;
@@ -78,7 +78,9 @@ export function DirectorRuntime() {
         const f = Math.min(1, elapsed / b.hold);
         useWorld.getState().setHours(startHours.current + (b.timeTo - startHours.current) * f);
       }
-      if (elapsed < b.hold) return;
+      // The beat's clock runs whenever it is on screen (so stepping with the arrow keys shows
+      // what the caption says); Space only controls moving on to the next beat.
+      if (!d.playing || elapsed < b.hold) return;
       if (b.waitFor && !b.waitFor()) {
         if (!d.waiting) useDirector.setState({ waiting: true });
         return;

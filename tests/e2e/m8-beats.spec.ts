@@ -42,7 +42,7 @@ for (const theme of themes) {
         const label = (await beats.nth(i).getAttribute('aria-label')) ?? '';
         const beatId = label.replace(/^Beat \d+: /, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
         await expect(page.locator('[aria-live="polite"] p.caption').first()).not.toBeEmpty();
-        await expect(page.getByText('Demonstration environment.')).toBeVisible();
+        await expect(page.getByText('Demonstration environment.').first()).toBeVisible();
         const check = checks[`${script}/${beatId}`];
         if (check) await check(page);
         await page.screenshot({ path: `${OUT}/${theme}-${script}-${String(i + 1).padStart(2, '0')}-${beatId}.jpg`, type: 'jpeg', quality: 82, timeout: 180_000 });
