@@ -73,6 +73,11 @@ export class Weather {
     this.group.add(this.cloudMesh, this.rain, this.streams);
   }
 
+  /** Make every weather mesh visible (for pre-compiling materials at load). */
+  showAll() {
+    this.cloudMesh.visible = this.rain.visible = this.streams.visible = true;
+  }
+
   /** Skip passes that would draw nothing (no fragment or vertex work at all). */
   setVisibility(altitude: number, exaggeration: number) {
     this.cloudMesh.visible = weather.cloud.value > 0.05 && altitude > 2_600 * exaggeration * 2.5;

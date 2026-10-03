@@ -61,6 +61,7 @@ export class WorldRuntime {
   private readonly skyScene = new Scene();
   private readonly pmrem: PMREMGenerator;
   private envTexture: Texture | null = null;
+  private envTarget: ReturnType<PMREMGenerator['fromScene']> | null = null;
   private envKey = '';
   private themeBlend = 0;
   private readonly blendA = new Color();
@@ -146,6 +147,10 @@ export class WorldRuntime {
     ];
     this.sites = new Sites(net, meta, campuses, (x, z) => this.terrain.heightAt(x, z));
     this.scene.add(this.sites.group);
+    // Warm-up frame through the real pipeline with every weather layer showing, so their
+    // materials are built now rather than mid-presentation when a layer first appears.
+    this.weather.showAll();
+    this.render();
     (window as unknown as { __twinNetwork?: boolean }).__twinNetwork = true;
     const nb = meta.branches.length;
     this.flowBuf = new Float32Array(nb);
@@ -316,10 +321,14 @@ export class WorldRuntime {
     this.scene.environmentIntensity = intensity;
     if (key === this.envKey) return;
     this.envKey = key;
-    const rt = this.pmrem.fromScene(this.skyScene, 0.04);
-    this.envTexture?.dispose();
-    this.envTexture = rt.texture;
-    this.scene.environment = rt.texture;
+    // Re-bake into the same render target: a new texture object would invalidate every lit
+    // material and force a full shader rebuild (a visible stall) each time the sun moved.
+    const rt = this.pmrem.fromScene(this.skyScene, 0.04, 0.1, 100, this.envTarget ? { renderTarget: this.envTarget } : {});
+    this.envTarget = rt;
+    if (this.envTexture !== rt.texture) {
+      this.envTexture = rt.texture;
+      this.scene.environment = rt.texture;
+    }
   }
 
   render(renderer?: WebGPURenderer): void {

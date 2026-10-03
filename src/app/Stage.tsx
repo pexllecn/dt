@@ -19,6 +19,19 @@ declare module '@react-three/fiber' {
 }
 extend(THREE as unknown as Parameters<typeof extend>[0]);
 
+// Debug: log each node-material build (which object, which material, when) to find
+// compilation stalls. Only with ?debugbuild.
+if (new URLSearchParams(location.search).has('debugbuild')) {
+  const proto = THREE.NodeMaterial.prototype as unknown as { setup(b: unknown): unknown };
+  const orig = proto.setup;
+  const log: string[] = ((window as unknown as { __builds: string[] }).__builds = []);
+  proto.setup = function (this: unknown, builder: unknown) {
+    const b = builder as { object?: { name?: string; type?: string }; material?: { type?: string }; context?: unknown; renderer?: unknown };
+    log.push(`${(performance.now() / 1000).toFixed(1)}s ${b.object?.name || b.object?.type} ${b.material?.type}`);
+    return orig.call(this, builder);
+  };
+}
+
 function World({ controls }: { controls: React.RefObject<ControlsHandle | null> }) {
   const { gl, scene, camera } = useThree();
   const setDpr = useThree((s) => s.setDpr);
