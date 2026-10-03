@@ -83,6 +83,7 @@ export const LIMITS = {
   topOilLimit: typical('Top-oil limit, normal cyclic loading', 105, '°C', IEC),
   currentNormalCyclic: typical('Current limit, normal cyclic loading', 1.3, 'per unit', IEC),
   currentShortEmergency: typical('Current limit, short-time emergency', 1.5, 'per unit', IEC),
+  ambientRatingSlope: assumed('Rating change with ambient', 0.01, 'per unit per K', undefined, 'Relative to a 20 °C design ambient, a common rule of thumb'),
   n1SecureLoading: assumed('N-1 secure if the remaining unit stays within', 1.3, 'per unit', undefined, 'The normal cyclic current limit'),
 } as const;
 

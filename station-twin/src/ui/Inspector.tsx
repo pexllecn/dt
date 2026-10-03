@@ -11,6 +11,9 @@ import type { Component, ComponentId, SimState } from '../sim/types.ts';
 import type { SimClient } from '../app/client.ts';
 import { confirmReq, history, selected, snap, toast } from '../app/store.ts';
 import { Icon } from './icons.tsx';
+import { agents } from '../app/store.ts';
+import { AGENT_NAMES, ALL_RULES, neighbours } from '../agents/agents.ts';
+import type { AnyRule } from '../agents/types.ts';
 
 function stateChip(c: Component, s: SimState) {
   if (!c.installed) return <span class="chip dim">Not built</span>;
@@ -175,7 +178,44 @@ export function Inspector({ client, onFrame }: { client: SimClient; onFrame: (id
         </div>
       )}
       {controls.length > 0 && <div class="actions">{controls}</div>}
+      <AgentSection id={id} client={client} />
       <div class="note">{c.note}{c.bay ? ' Breaker indicator lamps: red closed, green open, flashing amber tripped.' : ''}</div>
     </aside>
   );
+}
+
+/** The asset's agent: what it is reporting now, its rules and its neighbours. */
+function AgentSection({ id, client }: { id: ComponentId; client: SimClient }) {
+  const v = agents.value;
+  const s = snap.value;
+  if (!v || !s) return null;
+  const st = v.statuses.find((x) => x.id === id);
+  if (!st) return null;
+  const isTx = s.C[id].kind === 'tx';
+  const rules = rulesFor(id, v.mode);
+  const active = rules.filter((r) => st.active.includes(r.id));
+  return (
+    <div class="agent">
+      <div class="ah"><b>Agent</b><span class={`lv ${st.level}`}>{st.level === 'calm' ? 'Calm' : st.level[0]!.toUpperCase() + st.level.slice(1)}</span>
+        {isTx && <button class="mat" title="Rule maturity: base alarms only, or the extended set" onClick={() => void client.decide({ type: 'ruleset', mode: v.mode === 'extended' ? 'base' : 'extended' })}><span class={v.mode === 'base' ? 'on' : ''}>Base</span><span class={v.mode === 'extended' ? 'on' : ''}>Extended</span></button>}
+      </div>
+      {active.length === 0 ? <div class="quiet">{rules.length} rules, none reporting.</div> : (
+        <ul>{active.map((r) => <li key={r.id}><span class={`sev ${r.severity}`} /><span class="num">{r.id}</span> {r.description}</li>)}</ul>
+      )}
+      <div class="nb">Neighbours: {neighbours(id, s).map((n) => AGENT_NAMES[n]).join(', ') || 'none'}</div>
+    </div>
+  );
+}
+
+function rulesFor(id: ComponentId, mode: 'base' | 'extended'): readonly AnyRule[] {
+  const R = ALL_RULES;
+  if (id === 'T1' || id === 'T2' || id === 'T3' || id === 'T4') return mode === 'extended' ? [...R.TX_BASE, ...R.TX_EXTENDED] : R.TX_BASE;
+  if (id.startsWith('BUS')) return R.BUS_RULES;
+  if (id === 'WIND') return R.WIND_RULES;
+  if (id === 'BESS') return R.BATTERY_RULES;
+  if (id === 'GAS') return R.GAS_RULES;
+  if (id.startsWith('LD_')) return R.DEMAND_RULES;
+  if (id.startsWith('TIE')) return R.TIE_RULES;
+  if (id === 'GRID') return R.INFEED_RULES;
+  return [];
 }

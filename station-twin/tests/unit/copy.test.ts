@@ -4,6 +4,9 @@ import { assumptionTable } from '../../src/config/assumptions.ts';
 import { Engine } from '../../src/sim/engine.ts';
 import { createRegistry } from '../../src/sim/registry.ts';
 import { runEngineeringScenario, SCENARIOS } from '../../src/sim/scenarios.ts';
+import { Twin } from '../../src/agents/twin.ts';
+import { ALL_RULES } from '../../src/agents/agents.ts';
+import { BEATS, TourRunner } from '../../src/tour/tour.ts';
 
 const US = /\b(colou?r(?<!colour)|center|centers|behavior|optimiz\w*|analyz\w*|organiz\w*|minimiz\w*|maximiz\w*|prioritiz\w*|stabiliz\w*|normaliz\w*|energiz\w*|synchroniz\w*|authoriz\w*|recogniz\w*|realiz\w*|favor\w*|labor|meter(?!ed)|program(?!me)|license(?!d)|defense|catalog(?!ue)|gray|modeling|modeled|traveled|canceled|fueled)\b/i;
 const DASH = /[\u2013\u2014]/;
@@ -30,6 +33,13 @@ function collect(): string[] {
   out.push(...e.s.log.map((l) => l.text));
   for (const ev of e.s.frequency.events) out.push(ev.cause);
   out.push(e.command({ type: 'operate', id: 'TIE_N', device: 'dsLine', action: 'open' }).detail);
+  // Agents: rule text, threshold labels, and every trace and narration a full guided tour produces.
+  for (const r of Object.values(ALL_RULES).flat()) out.push(r.description, r.threshold.label, r.threshold.note ?? '');
+  for (const b of BEATS) out.push(b.title, b.caption);
+  const { twin, runner } = TourRunner.at(0, () => new Twin(), () => 'w');
+  for (let i = 0; i < 40; i++) { out.push(runner.status(twin).nextAction); if (runner.next(twin) === 'end') break; }
+  for (const f of twin.agents.feed) out.push(f.text, f.narration);
+  for (const r of twin.coord.state.recommendations) out.push(r.trigger, ...r.options.map((o) => o.label));
   return out.filter((x) => x.length > 0);
 }
 

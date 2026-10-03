@@ -76,7 +76,7 @@ export function FlowLegend() {
 export function Keys() {
   return (
     <div class="keys panel" aria-hidden="true">
-      <kbd>Space</kbd>pause<kbd>1</kbd><kbd>2</kbd>lens<kbd>S</kbd>scenarios<kbd>T</kbd>theme<kbd>H</kbd>overview<kbd>M</kbd>method<kbd>D</kbd>debug<kbd>Esc</kbd>clear
+      <kbd>Space</kbd>pause<kbd>→</kbd>tour<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>lens<kbd>S</kbd>scenarios<kbd>A</kbd>agents<kbd>Ctrl K</kbd>palette<kbd>T</kbd>theme<kbd>H</kbd>overview<kbd>M</kbd>method<kbd>D</kbd>debug<kbd>Esc</kbd>clear
     </div>
   );
 }

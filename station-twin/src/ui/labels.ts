@@ -54,17 +54,18 @@ export function attachLabels(stage: Stage, layer: HTMLElement, getState: () => S
     const sel = getSelected();
     const projected = stage.project(PRIORITY);
     const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
-    for (const sel2 of ['.top', '.dock:not(.closed)', '.insp', '.log', '.badge', '.toast']) {
+    for (const sel2 of ['.top', '.dock:not(.closed)', '.insp', '.feed', '.rec', '.badge', '.toast', '.legend']) {
       const el = document.querySelector(sel2);
       if (el) { const r = el.getBoundingClientRect(); placed.push({ x0: r.left, x1: r.right, y0: r.top, y1: r.bottom }); }
     }
     for (const p of projected) {
       const el = els.get(p.id)!;
       const isBus = p.id.startsWith('BUS') || p.id === 'BS220';
-      const maxDist = far ? (isBus || p.id === 'BS220' ? 0 : 12000) : isBus ? 260 : p.id === 'T1' || p.id === 'T2' || p.id === 'GRID' || p.id === 'LD_TOWN' ? 1600 : 700;
+      const circ = stage.foldP() > 0.5;
+      const maxDist = circ ? Infinity : far ? (isBus || p.id === 'BS220' ? 0 : 12000) : isBus ? 260 : p.id === 'T1' || p.id === 'T2' || p.id === 'GRID' || p.id === 'LD_TOWN' ? 1600 : 700;
       let show = p.visible && (p.distance < maxDist || p.id === sel);
-      if (far && (p.id === 'T1' || p.id === 'T2' || p.id === 'T3' || p.id === 'T4' || !s.C[p.id].installed) && p.id !== sel) show = false;
-      const w = 150;
+      if (!circ && far && (p.id === 'T1' || p.id === 'T2' || p.id === 'T3' || p.id === 'T4' || !s.C[p.id].installed) && p.id !== sel) show = false;
+      const w = circ ? 118 : 150;
       const box = { x0: p.x - w / 2, x1: p.x + w / 2, y0: p.y - 26, y1: p.y };
       if (show && placed.some((b) => b.x0 < box.x1 && b.x1 > box.x0 && b.y0 < box.y1 && b.y1 > box.y0)) show = false;
       if (show) placed.push(box);
@@ -78,12 +79,12 @@ export function attachLabels(stage: Stage, layer: HTMLElement, getState: () => S
       const ang = stage.lens === 'flow' ? stage.flowArrow(p.id, p) : null;
       const arrow = ang === null ? '' : `<i class="arr" style="transform:rotate(${Math.round((ang * 180) / Math.PI / 5) * 5}deg)">${ARROW}</i>`;
       const html = `${arrow}<b>${t.name}</b><span class="num">${t.value}</span>`;
-      const cls = `lbl ${t.cls} ${p.id === sel ? 'sel' : ''}`;
+      const cls = `lbl ${t.cls} ${p.id === sel ? 'sel' : ''} ${circ ? 'circ' : ''}`;
       if (cache.get(p.id) !== html + cls) { el.innerHTML = html; el.className = cls; cache.set(p.id, html + cls); }
     }
     for (const l of statics) {
       const p = stage.projectPoint(l.pos);
-      let show = p.visible && p.distance > l.minDistance;
+      let show = p.visible && p.distance > l.minDistance && stage.foldP() === 0;
       const w = l.text.length * 7 + 16;
       const box = { x0: p.x - w / 2, x1: p.x + w / 2, y0: p.y - 22, y1: p.y };
       if (show && placed.some((b) => b.x0 < box.x1 && b.x1 > box.x0 && b.y0 < box.y1 && b.y1 > box.y0)) show = false;

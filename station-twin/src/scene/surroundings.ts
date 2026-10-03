@@ -493,7 +493,7 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
     shrubGeo.translate(0, 1.4, 0);
     const shrubMesh = new THREE.InstancedMesh(shrubGeo, m.hedge, shrubs.length);
     shrubs.forEach((mm, i) => shrubMesh.setMatrixAt(i, mm));
-    shrubMesh.castShadow = true;
+    shrubMesh.castShadow = false;
     shrubMesh.receiveShadow = true;
     shrubMesh.userData.landscape = true;
     group.add(shrubMesh);

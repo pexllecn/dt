@@ -600,6 +600,15 @@ export class Engine {
   // Snapshots and replay
   // -------------------------------------------------------------------------------------
 
+  /** An independent engine continuing from a copy of a state (for look-ahead). Exact: the engine has no hidden state. */
+  static fromState(state: SimState): Engine {
+    const e = Object.create(Engine.prototype) as Engine;
+    e.s = structuredClone(state);
+    (e as unknown as { inputLog: LoggedCommand[] }).inputLog = [];
+    (e as unknown as { lastFlows: FlowResult | null }).lastFlows = null;
+    return e;
+  }
+
   snapshot(): SimState {
     return structuredClone(this.s);
   }
