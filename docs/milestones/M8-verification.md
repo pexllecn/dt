@@ -1,6 +1,6 @@
 # Milestone 8: Verification
 
-Status: see the results table below. Screenshots of every beat in both themes are in `docs/screens/m8/`.
+Status: complete. All 8 walks pass (4 scripts × 2 themes, 62 beat screenshots, 43.7 minutes). Screenshots of every beat in both themes are in `docs/screens/m8/`.
 
 ## What is verified
 
@@ -40,7 +40,12 @@ The earlier milestone specs (M2 to M5) still run, pinned to Explore mode.
 
 ## Results
 
-RESULTS
+| Theme | today (7 beats) | hero (9) | storm (6) | 2034 (9) |
+|---|---|---|---|---|
+| Specimen | pass, 5.4 min | pass, 6.4 min | pass, 4.6 min | pass, 6.4 min |
+| Control Room | pass, 4.7 min | pass, 6.4 min | pass, 4.1 min | pass, 5.7 min |
+
+Unit tests: 159 of 159 pass. Times are SwiftShader in a container. On a GPU each beat settles in its flight time (3 to 5 s).
 
 ## Problems the verification found, and fixed
 
@@ -53,7 +58,17 @@ RESULTS
 
 Main-thread measurements in this container (SwiftShader; frame rates are not meaningful, main-thread JavaScript is representative):
 
-PERF
+| View | World update (ms per frame) | Draw calls | Triangles (M) |
+|---|---|---|---|
+| National, Explore | 4.7 | 51 | 1.11 |
+| Regional north west | 5.3 | 63 | 1.50 |
+| Site close-up (Flagford) | 7.4 | 50 | 0.52 |
+| Storm, weather and rain | 6.2 | 104 | 2.69 |
+| Storm front, Director playing | 4.9 | 81 | 1.13 |
+| Hero, panels and studies | 5.0 | 51 | 1.11 |
+| 2034, feed open | 5.4 | 51 | 1.11 |
+
+World update is the main-thread JavaScript per frame: terrain level of detail, flow particles, assets, weather and uniforms. The container's CPU is shared with the software rasteriser, so expect it to be several times lower on an M1 or M2. Render-submission time is dominated here by the software GPU's back-pressure and is not reported.
 
 - **Long tasks.** None over 50 ms during 40 s of playback of the today, storm and 2034 scripts, after the environment fix.
 - **Simulation updates.** An input change (for example the 2034 year steps) costs about 3 ms in the message handler and about 14 ms of React work in total, with no long task.
