@@ -99,7 +99,8 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
   const wood = new THREE.MeshStandardNodeMaterial({ roughness: 0.9, metalness: 0 });
   wood.colorNode = mix(color(0x4a3a2a), color(0x5e4a35), mx_fractal_noise_float(positionWorld.mul(vec3(3, 0.3, 3)), 2, 2, 0.5).mul(0.5).add(0.5));
   const turbineWhite = new THREE.MeshStandardNodeMaterial({ color: 0xe8ebec, roughness: 0.45, metalness: 0.05 });
-  const panel = new THREE.MeshStandardNodeMaterial({ color: 0x141c2b, roughness: 0.18, metalness: 0.5 });
+  // Monocrystalline modules: dark blue glass. Low metalness, so they read as blue panels, not as sky.
+  const panel = new THREE.MeshStandardNodeMaterial({ color: 0x1a2a46, roughness: 0.32, metalness: 0.1 });
   const containerMat = new THREE.MeshStandardNodeMaterial({ color: 0xd9dcdc, roughness: 0.55, metalness: 0.2 });
   const plumeMat = new THREE.MeshBasicNodeMaterial({ color: 0xe8ecef, transparent: true, opacity: 0.18, depthWrite: false });
   const borderMat = new THREE.MeshBasicNodeMaterial({ color: 0xf4f1e8, transparent: true, opacity: 0.55, depthWrite: false });
@@ -298,7 +299,8 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
 
   // --- solar farm (appears with a construction sequence when built) ---------------------------
   const sf = SITES.solar;
-  const panelGeo = merge([at(box(24, 0.06, 4.2), 0, 2.0, 0, -0.44, 0, 0)]);
+  // Tilted 25 degrees towards the south (+z), as fixed-tilt arrays are in Ireland.
+  const panelGeo = merge([at(box(24, 0.06, 4.2), 0, 2.0, 0, 0.44, 0, 0)]);
   const legGeo = merge([post(0.05, 2.6, -11, -1.2, 0, 4), post(0.05, 1.4, -11, 1.4, 0, 4), post(0.05, 2.6, 0, -1.2, 0, 4), post(0.05, 1.4, 0, 1.4, 0, 4), post(0.05, 2.6, 11, -1.2, 0, 4), post(0.05, 1.4, 11, 1.4, 0, 4)]);
   const solarRows: THREE.Matrix4[][] = [];
   for (let z = sf.z0 + 10; z < sf.z1 - 6; z += 8.5) {
@@ -418,13 +420,15 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
   }
 
   // --- town at the horizon -------------------------------------------------------------------------
+  // Gardens: the empty plots get a tree, so the town sits among trees like the countryside.
+  const townTrees: THREE.Vector3[] = [];
   {
     const tn = SITES.town;
     const houses: Geo[] = [];
     const roofs: Geo[] = [];
     for (let x = tn.x0; x < tn.x1; x += 34) {
       for (let z = tn.z0; z < tn.z1; z += 30) {
-        if (rng.next() < 0.22) continue;
+        if (rng.next() < 0.22) { townTrees.push(new THREE.Vector3(x + (rng.next() - 0.5) * 16, 0, z + (rng.next() - 0.5) * 14)); continue; }
         const cxz = Math.hypot((x - (tn.x0 + tn.x1) / 2) / 1050, (z - (tn.z0 + tn.z1) / 2) / 400);
         if (cxz > 1 + rng.next() * 0.15) continue;
         const centre = cxz < 0.35;
@@ -449,6 +453,9 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
     houses.push(block(7, 26, 7, churchX, churchZ - 14, ground(churchX, churchZ)));
     addMesh(merge(houses), townMat, 'LD_TOWN', false);
     addMesh(merge(roofs), roofMat, 'LD_TOWN', false);
+    // Frame the town centre, not its whole spread: framed whole, the houses were specks 3 km away.
+    const tcx = (tn.x0 + tn.x1) / 2, tcz = (tn.z0 + tn.z1) / 2, ty = ground(tcx, tcz);
+    bounds.set('LD_TOWN', new THREE.Box3(new THREE.Vector3(tcx - 380, ty, tcz - 170), new THREE.Vector3(tcx + 380, ty + 24, tcz + 170)));
   }
 
   // --- the border ---------------------------------------------------------------------------------
@@ -501,6 +508,7 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
         }
       }
     }
+    for (const t of townTrees) if (!inLough(t.x, t.z, 1.1)) place(t.x, t.z, true);
     const shrubGeo = new THREE.IcosahedronGeometry(2.2, 0);
     shrubGeo.translate(0, 1.4, 0);
     const shrubMesh = new THREE.InstancedMesh(shrubGeo, m.hedge, shrubs.length);

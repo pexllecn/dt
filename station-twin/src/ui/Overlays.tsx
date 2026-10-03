@@ -156,7 +156,7 @@ export function Debug({ stats }: { stats: () => StageStats }) {
   return (
     <div class="debug panel num">
       <span>{s.fps.toFixed(0)} fps</span><span>{s.frameMs.toFixed(1)} ms</span><span>{s.drawCalls} draws</span>
-      <span>{(s.triangles / 1e6).toFixed(2)} M tris</span><span>{s.backend}</span><span>tier {s.tier}</span>
+      <span>{(s.triangles / 1e6).toFixed(2)} M tris</span><span>{s.backend}</span><span>tier {s.tier}</span><span>quality step {s.quality ?? 0}</span>
     </div>
   );
 }
