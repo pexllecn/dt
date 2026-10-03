@@ -125,3 +125,11 @@ body,
   outline: 1px solid var(--ink);
   outline-offset: 3px;
 }
+
+/* Printing the evidence pack: only the pack, in ink on paper. */
+@media print {
+  body * { visibility: hidden; }
+  .evidence, .evidence * { visibility: visible; }
+  .evidence { position: absolute; inset: 0; transform: none; width: auto; height: auto; border: 0; background: white !important; color: black; }
+  .evidence .overflow-y-auto { overflow: visible; }
+}

@@ -39,6 +39,9 @@ export interface Constraint {
 export interface StudyBundle {
   bus: string;
   busLabel: string;
+  /** The MW requested by the customer. */
+  requestedMW: number;
+  /** Study range: firm capacity is evaluated up to this level. */
   requestMW: number;
   /** The circuit carrying most of the new demand, taken out for the maintenance study. */
   mainFeed: { id: string; label: string };
@@ -52,6 +55,8 @@ export interface StudyBundle {
   firmIfRelievedMW: number;
   /** Constraints already violated before the connection (not attributed to it). */
   preExisting: string[];
+  /** Circuits carrying at least 5% of the new demand with everything in service. */
+  affected: { id: string; label: string; share: number }[];
   method: string;
   limits: { intact: number; postFault: number };
   ms: number;
@@ -165,7 +170,12 @@ function intervalFirm(
   return { firm: Math.max(0, firm), binding };
 }
 
-export function runConnectionStudies(engine: Engine, busId: string, requestMW: number): StudyBundle {
+/**
+ * Study a request at a bus. Firm capacity is evaluated up to `rangeMW` (at least the request), so
+ * the firmness dial can show what a larger request would face.
+ */
+export function runConnectionStudies(engine: Engine, busId: string, request: number, rangeMW = request): StudyBundle {
+  const requestMW = Math.max(request, rangeMW);
   const t0 = performance.now();
   const m = engine.model;
   const bus = m.busIndex.get(busId);
@@ -184,6 +194,13 @@ export function runConnectionStudies(engine: Engine, busId: string, requestMW: n
       feed = l;
     }
   });
+
+  const affected = m.branches
+    .map((b, l) => ({ id: b.id, label: b.label, share: intact.active[l] ? Math.abs(ptdf(intact, m.branches, l, bus)) : 0 }))
+    .filter((a) => a.share >= MIN_EFFECT)
+    .sort((a, b) => b.share - a.share)
+    .slice(0, 10)
+    .map((a) => ({ ...a, share: Math.round(a.share * 100) / 100 }));
 
   const base = (over: Partial<EngineInputs>): EngineInputs => ({
     date: hero.date,
@@ -298,6 +315,7 @@ export function runConnectionStudies(engine: Engine, busId: string, requestMW: n
   return {
     bus: busId,
     busLabel: `${m.buses[bus]!.node.name} ${m.buses[bus]!.kv} kV`,
+    requestedMW: request,
     requestMW,
     mainFeed: feed >= 0 ? { id: m.branches[feed]!.id, label: m.branches[feed]!.label } : { id: '', label: 'none' },
     studies,
@@ -305,6 +323,7 @@ export function runConnectionStudies(engine: Engine, busId: string, requestMW: n
     firmAllMW: Math.round(firmAllMW * 10) / 10,
     topConstraint,
     firmIfRelievedMW: Math.round(firmIfRelievedMW * 10) / 10,
+    affected,
     preExisting: [...pre].map((key) => {
       const [l, k] = key.split('|').map(Number) as [number, number];
       return k < 0 ? `${m.branches[l]!.label}, intact` : `${m.branches[l]!.label} after ${engine.contingencyLabel(k)}`;

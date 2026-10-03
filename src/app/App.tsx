@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { detectCapability, type Capability } from '@/render/backend';
-import { useWorld } from './store';
+import { frameStats, useWorld } from './store';
 import { useKeys } from './useKeys';
 import { useSim } from '@/sim/client';
 import { scenarios } from '@/sim/scenarios';
@@ -23,6 +23,19 @@ import { Picker } from '@/ui/Picker';
 import { Toast } from '@/ui/Toast';
 import { Governance, Notes } from '@/ui/Notes';
 import { Toolbar } from '@/ui/Toolbar';
+import { EvidencePack, HeroPanel } from '@/ui/Hero';
+import { DirectorBar, DirectorRuntime } from '@/director/Director';
+import { useDirector } from '@/director/store';
+import { bridge } from './bridge';
+import { useUi } from '@/ui/uiStore';
+import { CorridorLabels, CorridorsPanel } from '@/ui/Corridors';
+import { ToolDock } from '@/ui/ToolDock';
+import { Narration } from '@/ui/Narration';
+import { caveFace, caveMaster, cavePreview } from '@/cave/cave';
+import { CavePreview } from '@/cave/CavePreview';
+
+// Test and rehearsal hook: the stores, read-only by convention.
+Object.assign(window as unknown as Record<string, unknown>, { __twin: { useWorld, useSim, useUi, useDirector, bridge, frameStats } });
 
 export function App() {
   const [cap, setCap] = useState<Capability | null>(null);
@@ -52,8 +65,20 @@ export function App() {
     [],
   );
 
+  if (cavePreview) return <CavePreview />;
   if (!cap) return null;
   if (!cap.backend) return <FallbackCard reason={cap.reason ?? ''} />;
+
+  if (caveFace) {
+    // Immersive face: the scene only. The honesty badge stays on the front wall.
+    return (
+      <div className="relative h-full w-full">
+        <Stage backend={cap.backend} />
+        <LoadingVeil />
+        {caveFace === 'front' && <DataBadge />}
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-full w-full">
@@ -63,21 +88,30 @@ export function App() {
       <Picker />
       {ready && !bench && <Glyphs />}
       <SystemPill />
+      {caveMaster && <p className="figure pointer-events-none absolute right-8 top-[64px] z-40 text-[10px] uppercase tracking-[0.16em] text-ink-soft">immersive master · driving faces</p>}
       <DebugOverlay />
       <BenchPanel />
       <StatsRow />
       <TimeScrubber />
       {ready && !bench && (
         <>
+          <DirectorRuntime />
+          <DirectorBar />
           <Toolbar />
           <SpecimenPanel />
           <Inspector />
           <Recommendations />
+          <HeroPanel />
+          <CorridorsPanel />
+          <CorridorLabels />
+          <ToolDock />
+          <Narration />
           <Toast />
           <Notes />
           <AgentFeed />
           <Governance />
           <AuditLog />
+          <EvidencePack />
         </>
       )}
       <DataBadge />

@@ -2,18 +2,17 @@ import { useWorld } from '@/app/store';
 import { useSim } from '@/sim/client';
 import { StatusPill, type PillState } from './StatusPill';
 import { useUi } from './uiStore';
-import { useTick } from './useTick';
 
 /** Status pill driven by the simulation: comms loss and critical alarms outrank running or paused. */
 export function SystemPill() {
-  useTick(400);
   const timeRate = useWorld((s) => s.timeRate);
   const inputs = useSim((s) => s.inputs);
   const agents = useSim((s) => s.agents);
   const meta = useSim((s) => s.meta);
   const maturity = useUi((s) => s.maturity);
   const feedOpen = useUi((s) => s.feedOpen);
-  const hours = useWorld.getState().hours;
+  // Re-render when the 15-minute interval changes, not on a timer.
+  const hours = useWorld((s) => Math.min(95, Math.floor(s.hours * 4))) / 4;
   const step = Math.min(95, Math.floor(hours * 4));
   let critical = 0;
   if (agents && meta) {

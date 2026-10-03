@@ -3,7 +3,7 @@ import { useWorld } from '@/app/store';
 import { useSim } from '@/sim/client';
 import type { Recommendation } from '@/agents/engine';
 import { fmtHour, useUi } from './uiStore';
-import { useTick } from './useTick';
+import { SourceTag } from './SourceTag';
 
 function inputsHash(obj: unknown): string {
   const s = JSON.stringify(obj);
@@ -17,7 +17,6 @@ function inputsHash(obj: unknown): string {
  * Approve, Reject or Modify; every decision goes to the audit trail.
  */
 export function Recommendations() {
-  useTick(400);
   const agents = useSim((s) => s.agents);
   const inputs = useSim((s) => s.inputs);
   const meta = useSim((s) => s.meta);
@@ -25,8 +24,9 @@ export function Recommendations() {
   const ui = useUi();
   const [scale, setScale] = useState(1);
   const [modifying, setModifying] = useState(false);
-  const hours = useWorld.getState().hours;
-  if (!agents || !meta) return null;
+  // Re-render when the 15-minute interval changes, not on a timer.
+  const hours = useWorld((s) => Math.min(95, Math.floor(s.hours * 4))) / 4;
+  if (!agents || !meta || inputs.scenario === 'hero' || inputs.scenario === 'y2034') return null;
   const step = Math.floor(hours * 4);
   const pending = agents.recommendations.filter((r) => r.step <= step && !ui.decisions[r.id] && !inputs.adjustments.some((a) => a.fromHour === r.step / 4));
   const rec: Recommendation | undefined = pending[pending.length - 1];
@@ -76,7 +76,9 @@ export function Recommendations() {
     >
       <div className="flex items-baseline justify-between">
         <p className="text-[10px] uppercase tracking-[0.18em] text-crimson">Recommendation · awaiting decision</p>
-        <p className="figure text-[11px] text-ink-soft">{fmtHour(rec.step / 4)}</p>
+        <p className="figure text-[11px] text-ink-soft">
+          {fmtHour(rec.step / 4)} <SourceTag s="Synthetic" />
+        </p>
       </div>
       <h3 className="caption mt-1.5 text-[21px] leading-tight text-ink">{rec.title}</h3>
       <p className="mt-1.5 text-[12px] leading-snug text-ink-soft">{rec.summary}</p>

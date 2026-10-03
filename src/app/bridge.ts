@@ -1,4 +1,5 @@
 import { Vector3, type PerspectiveCamera } from 'three/webgpu';
+import type CameraControls from 'camera-controls';
 import { itmToScene } from '@/lib/geo';
 import { world } from '@/scene/world/uniforms';
 
@@ -10,6 +11,7 @@ export const bridge = {
   camera: null as PerspectiveCamera | null,
   heightAt: null as ((x: number, z: number) => number) | null,
   pickBranch: null as ((px: number, py: number, w: number, h: number) => number) | null,
+  controls: null as CameraControls | null,
 };
 
 const v = new Vector3();

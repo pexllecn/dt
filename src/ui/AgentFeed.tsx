@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { useWorld } from '@/app/store';
 import { useSim } from '@/sim/client';
 import type { Severity, TraceEntry } from '@/agents/types';
+import { SourceTag } from './SourceTag';
 import { ALL_TYPES, SEVERITIES, fmtHour, sevRank, typeLabel, useUi } from './uiStore';
-import { useTick } from './useTick';
 
 const sevStyle: Record<Severity, string> = {
   critical: 'bg-crimson',
@@ -84,10 +84,10 @@ function Entry({ t }: { t: TraceEntry }) {
 
 /** Right-edge drawer: the chronological agent feed up to the current time, filterable. */
 export function AgentFeed() {
-  useTick(500);
   const agents = useSim((s) => s.agents);
   const ui = useUi();
-  const hours = useWorld.getState().hours;
+  // Re-render when the 15-minute interval changes, not on a timer.
+  const hours = useWorld((s) => Math.min(95, Math.floor(s.hours * 4))) / 4;
   const step = Math.floor(hours * 4);
   const entries = useMemo(() => {
     if (!agents) return [] as TraceEntry[];
@@ -129,7 +129,8 @@ export function AgentFeed() {
             </button>
           </div>
           <p className="mt-1 text-[11px] text-ink-soft">
-            Every entry is a rule firing or clearing, with the inputs it read. Rules are fixed and versioned; nothing here is learned at run time.
+            Every entry is a rule firing or clearing, with the inputs it read. Rules are fixed and versioned; nothing here is learned at run time.{' '}
+            <SourceTag s="Synthetic" />
           </p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {ALL_TYPES.map((t) => (

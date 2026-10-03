@@ -1,6 +1,6 @@
 /**
  * Scene palettes. UI tokens live in styles.css; these drive materials and light.
- * "Specimen": a plaster relief model on warm paper. "Control Room": basalt on near-black.
+ * "Specimen": a painted relief model, pasture green on warm paper. "Control Room": dark moss on near-black.
  */
 export type ThemeId = 'specimen' | 'control';
 
@@ -25,12 +25,12 @@ export interface ScenePalette {
 export const palettes: Record<ThemeId, ScenePalette> = {
   specimen: {
     ground: '#efeae0',
-    terrainLow: '#e7e1d5',
-    terrainHigh: '#dad7d0',
-    terrainContext: '#d3cfc7',
-    lake: '#9fb0b2',
-    seaShallow: '#b4c2c1',
-    seaDeep: '#a1b2b4',
+    terrainLow: '#a7be8a',
+    terrainHigh: '#b4b79c',
+    terrainContext: '#bcc4b0',
+    lake: '#8fa9b4',
+    seaShallow: '#a9c1c9',
+    seaDeep: '#93adb8',
     foam: '#f4f1ea',
     contour: '#8d877b',
     roughness: 0.93,
@@ -42,9 +42,9 @@ export const palettes: Record<ThemeId, ScenePalette> = {
   },
   control: {
     ground: '#0a0c0f',
-    terrainLow: '#4a4f55',
-    terrainHigh: '#5d636a',
-    terrainContext: '#2c3035',
+    terrainLow: '#34453a',
+    terrainHigh: '#4a5348',
+    terrainContext: '#2a2f2e',
     lake: '#111a22',
     seaShallow: '#16212b',
     seaDeep: '#0b1117',

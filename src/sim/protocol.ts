@@ -1,6 +1,8 @@
 import type { ScenarioId } from './scenarios';
 import type { DayResult } from './engine';
 import type { AgentDay, AgentInfo } from '@/agents/engine';
+import type { StudyBundle } from './studies';
+import type { Corridor } from './corridors';
 
 export interface SimInputs {
   scenario: ScenarioId;
@@ -37,20 +39,23 @@ export interface BranchMeta {
 
 export interface ModelMeta {
   branches: BranchMeta[];
-  buses: { id: string; node: string; kv: number }[];
+  buses: { id: string; node: string; kv: number; name: string; e: number; n: number }[];
   units: { id: string; name: string; bus: string; capacity: number }[];
   wind: { bus: string; name: string; e: number; n: number }[];
   contingencyLabels: string[];
   agents: AgentInfo[];
+  largeLoads: { id: string; name: string; bus: string; hypothetical: boolean }[];
   ruleSetVersion: string;
   ruleSetHash: string;
 }
 
 export type ToWorker =
   | { type: 'init'; base: string; inputs: SimInputs }
-  | { type: 'inputs'; inputs: SimInputs };
+  | { type: 'inputs'; inputs: SimInputs }
+  | { type: 'study'; bus: string; requestMW: number; rangeMW: number };
 
 export type FromWorker =
   | { type: 'ready'; meta: ModelMeta; ms: number }
-  | { type: 'day'; day: DayResult; agents: Omit<AgentDay, 'agents'>; inputs: SimInputs; ms: number }
+  | { type: 'day'; day: DayResult; agents: Omit<AgentDay, 'agents'>; corridors: Corridor[] | null; inputs: SimInputs; ms: number }
+  | { type: 'study'; bundle: StudyBundle }
   | { type: 'error'; message: string };
