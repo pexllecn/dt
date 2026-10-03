@@ -3,6 +3,7 @@ import { useSim } from '@/sim/client';
 import { scenarios, type ScenarioId } from '@/sim/scenarios';
 import { fmtHour, useUi } from './uiStore';
 import { useTick } from './useTick';
+import { useDirector } from '@/director/store';
 
 const swatch: Record<ScenarioId, string> = { today: '#c9c3b5', hero: '#a8231b', storm: '#4f5d6b', y2034: '#a86a12' };
 
@@ -44,7 +45,8 @@ export function SpecimenPanel() {
   const year = inputs.year ?? sc.year;
   const ic = inputs.icShare ?? sc.icShare;
   const hours = useWorld.getState().hours;
-  if (ui.selectedBranch) return null;
+  const mode = useDirector((s) => s.mode);
+  if (ui.selectedBranch || mode === 'director') return null;
 
   const sweep = () => {
     if (!day || !meta) return;

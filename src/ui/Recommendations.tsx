@@ -26,7 +26,7 @@ export function Recommendations() {
   const [scale, setScale] = useState(1);
   const [modifying, setModifying] = useState(false);
   const hours = useWorld.getState().hours;
-  if (!agents || !meta) return null;
+  if (!agents || !meta || inputs.scenario === 'hero' || inputs.scenario === 'y2034') return null;
   const step = Math.floor(hours * 4);
   const pending = agents.recommendations.filter((r) => r.step <= step && !ui.decisions[r.id] && !inputs.adjustments.some((a) => a.fromHour === r.step / 4));
   const rec: Recommendation | undefined = pending[pending.length - 1];

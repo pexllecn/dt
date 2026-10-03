@@ -17,11 +17,11 @@ export function Toast() {
   if (!shown) return null;
   return (
     <div
-      className={`halo pointer-events-none absolute bottom-[150px] left-1/2 z-30 w-[640px] -translate-x-1/2 text-center transition-opacity duration-700 ${visible ? 'opacity-100' : 'opacity-0'}`}
+      className={`halo pointer-events-none absolute left-1/2 top-[76px] z-30 w-[620px] -translate-x-1/2 text-center transition-opacity duration-700 ${visible ? 'opacity-100' : 'opacity-0'}`}
       role="status"
       aria-live="polite"
     >
-      <p className="caption text-[19px] leading-snug text-ink">{shown.text}</p>
+      <p className="caption text-[17px] leading-snug text-ink">{shown.text}</p>
     </div>
   );
 }

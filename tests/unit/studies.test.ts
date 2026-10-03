@@ -39,3 +39,32 @@ describe('connection studies (METHOD-FIRM-01)', () => {
     expect(hi.curtailedMWhYear).toBeGreaterThanOrEqual(0);
   });
 });
+
+describe('conditional offer (METHOD-OFFER-01)', async () => {
+  const { deriveOffer } = await import('@/agents/offer');
+  const { AgentEngine } = await import('@/agents/engine');
+  const { scenarios } = await import('@/sim/scenarios');
+  const r = runConnectionStudies(engine, bellacorick.id, 50, 150);
+  const sc = scenarios.hero;
+  const wind = { reference: sc.windRef, seed: sc.seed, scale: 1 };
+  const inp = { date: sc.date, year: sc.year, wind, icShare: sc.icShare, extraLoad: {}, outages: [], unitOutages: [] };
+  const day = engine.runDay(inp);
+  const ag = new AgentEngine(engine).run(day, { scenarioWind: wind, ambientC: 13, humidityPct: 82, commsLostFromStep: null, stalePolicy: 'consistency', tripSteps: {} }, sc.icShare, () => [], { year: 2026 });
+
+  it('names the circuits that carry the demand and turns agent findings on them into conditions precedent', () => {
+    expect(r.requestedMW).toBe(50);
+    expect(r.affected.some((a) => /Bellacorick to Castlebar/.test(a.label))).toBe(true);
+    const offer = deriveOffer(r, 50, ag.trace);
+    console.log(offer.firmMW, offer.conditions.map((c) => `${c.kind}: ${c.text}`));
+    expect(offer.firmMW).toBeLessThanOrEqual(50);
+    expect(offer.conditions.some((c) => c.kind === 'precedent' && /Bellacorick to Castlebar/.test(c.text))).toBe(true);
+  });
+
+  it('a level above the firm limit is offered partly non-firm', () => {
+    const big = deriveOffer(r, 150, ag.trace);
+    if (r.firmAllMW < 150) {
+      expect(big.nonFirmMW).toBeGreaterThan(0);
+      expect(big.conditions.some((c) => c.kind === 'non-firm')).toBe(true);
+    }
+  });
+});

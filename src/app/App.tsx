@@ -23,6 +23,16 @@ import { Picker } from '@/ui/Picker';
 import { Toast } from '@/ui/Toast';
 import { Governance, Notes } from '@/ui/Notes';
 import { Toolbar } from '@/ui/Toolbar';
+import { EvidencePack, HeroPanel } from '@/ui/Hero';
+import { DirectorBar, DirectorRuntime } from '@/director/Director';
+import { useDirector } from '@/director/store';
+import { bridge } from './bridge';
+import { useUi } from '@/ui/uiStore';
+import { CorridorLabels, CorridorsPanel } from '@/ui/Corridors';
+import { ToolDock } from '@/ui/ToolDock';
+
+// Test and rehearsal hook: the stores, read-only by convention.
+Object.assign(window as unknown as Record<string, unknown>, { __twin: { useWorld, useSim, useUi, useDirector, bridge } });
 
 export function App() {
   const [cap, setCap] = useState<Capability | null>(null);
@@ -69,15 +79,22 @@ export function App() {
       <TimeScrubber />
       {ready && !bench && (
         <>
+          <DirectorRuntime />
+          <DirectorBar />
           <Toolbar />
           <SpecimenPanel />
           <Inspector />
           <Recommendations />
+          <HeroPanel />
+          <CorridorsPanel />
+          <CorridorLabels />
+          <ToolDock />
           <Toast />
           <Notes />
           <AgentFeed />
           <Governance />
           <AuditLog />
+          <EvidencePack />
         </>
       )}
       <DataBadge />

@@ -7,7 +7,7 @@ for (const shot of m2Shots) {
   test(`world: ${shot.name}`, async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
-    await page.goto(`/?${shot.query}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`/?mode=explore&${shot.query}`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => (window as unknown as { __twinReady?: boolean }).__twinReady === true, null, {
       timeout: 180_000,
     });

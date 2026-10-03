@@ -3,6 +3,7 @@ import { Engine } from './engine';
 import { AgentEngine } from '@/agents/engine';
 import { RULESET_VERSION, ruleSetHash } from '@/agents/rules';
 import { scenarios } from './scenarios';
+import { runConnectionStudies } from './studies';
 import type { FromWorker, ModelMeta, SimInputs, ToWorker } from './protocol';
 import type { NetworkBundle } from './types';
 
@@ -106,11 +107,12 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
             lengthKm: b.lengthKm,
           };
         }),
-        buses: m.buses.map((b) => ({ id: b.id, node: b.node.id, kv: b.kv })),
+        buses: m.buses.map((b) => ({ id: b.id, node: b.node.id, kv: b.kv, name: b.node.name, e: b.node.e, n: b.node.n })),
         units: m.units.map((u) => ({ id: u.spec.id, name: u.spec.name, bus: m.buses[u.bus]!.id, capacity: u.capacity })),
         wind: m.wind.map((w) => ({ bus: m.buses[w.bus]!.id, name: w.name, e: w.e, n: w.n })),
         contingencyLabels: m.branches.map((_, k) => engine!.contingencyLabel(k)),
         agents: agentEngine.agents,
+        largeLoads: m.largeLoads.map((l) => ({ id: l.id, name: l.name, bus: m.buses[l.bus]!.id, hypothetical: l.hypothetical })),
         ruleSetVersion: RULESET_VERSION,
         ruleSetHash: ruleSetHash(),
       };
@@ -118,6 +120,10 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
       run(msg.inputs);
     } else if (msg.type === 'inputs') {
       run(msg.inputs);
+    } else if (msg.type === 'study' && engine) {
+      const bundle = runConnectionStudies(engine, msg.bus, msg.requestMW, msg.rangeMW);
+      post({ type: 'study', bundle });
+      // Studies switch solvers; the next day run rebuilds from the current inputs as normal.
     }
   } catch (e) {
     post({ type: 'error', message: String(e) });

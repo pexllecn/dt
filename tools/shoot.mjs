@@ -18,6 +18,6 @@ try {
   logs.push('[shoot] timed out waiting for ready');
 }
 await page.waitForTimeout(Number(wait));
-await page.screenshot({ path: out });
+await page.screenshot({ path: out, timeout: 180000 });
 console.log([...new Set(logs)].filter((l) => !l.includes("[vite]")).slice(0, 40).join("\n"));
 await browser.close();

@@ -186,20 +186,21 @@ export function createTerrainMaterial(placeholder: DataTexture): TerrainNodeMate
   const hyps = smoothstep(20, 650, h);
   const base = mix(world.terrainLow, world.terrainHigh, hyps);
   const sloped = mix(base, base.mul(0.93), smoothstep(0.02, 0.25, slope));
-  // Class tints: subtle paint on the plaster model in Specimen, deeper tones in Control Room.
+  // Class tints: Irish land cover in Specimen (pasture, conifer, bog, heath, rock), deeper tones in
+  // Control Room. Strongest close up, still clearly green at national scale.
   const tintOf = (spec: string, ctrl: string) => mix(hex(spec), hex(ctrl), world.themeMix);
-  const tintStrength = mix(float(0.35), float(0.75), smoothstep(80_000, 15_000, world.altitude));
+  const tintStrength = mix(float(0.55), float(0.85), smoothstep(80_000, 15_000, world.altitude));
   let tinted = sloped;
-  tinted = mix(tinted, tintOf('#c8cbb8', '#2f3832'), forest.mul(tintStrength));
-  tinted = mix(tinted, tintOf('#d8cab0', '#3d372d'), wet.mul(tintStrength));
-  tinted = mix(tinted, tintOf('#d5c9bd', '#3b3536'), heath.mul(tintStrength));
-  tinted = mix(tinted, tintOf('#dcdcc8', '#3d453c'), grass.mul(tintStrength.mul(0.7)));
-  tinted = mix(tinted, tintOf('#d4d3d0', '#5a5c5f'), rock.mul(tintStrength));
-  tinted = mix(tinted, tintOf('#eee3c6', '#5e5747'), sand.mul(tintStrength));
+  tinted = mix(tinted, tintOf('#6f8e5e', '#22362a'), forest.mul(tintStrength));
+  tinted = mix(tinted, tintOf('#a99a74', '#3b3a2b'), wet.mul(tintStrength));
+  tinted = mix(tinted, tintOf('#9c8f7a', '#3a3433'), heath.mul(tintStrength));
+  tinted = mix(tinted, tintOf('#9dbd7c', '#33493a'), grass.mul(tintStrength.mul(0.8)));
+  tinted = mix(tinted, tintOf('#bdbcb4', '#565a5c'), rock.mul(tintStrength));
+  tinted = mix(tinted, tintOf('#e2d8b8', '#5e5747'), sand.mul(tintStrength));
   const speckle = mx_noise_float(vec3(fragXZ0.mul(0.06), 2)).mul(0.04).mul(near);
   const land = mix(tinted.mul(float(1).add(speckle)), world.terrainContext, context.mul(0.85));
   material.colorNode = vec4(mix(land, world.lake, lake), 1);
-  material.roughnessNode = mix(world.roughness, float(0.3), lake);
+  material.roughnessNode = mix(world.roughness, float(0.62), lake);
   material.metalnessNode = float(0);
 
   // Baked sky visibility, computed at 2.5x; fades as exaggeration relaxes towards 1x.

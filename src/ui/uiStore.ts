@@ -24,12 +24,18 @@ export interface UiState {
   selectedBranch: string | null;
   selectedAgent: string | null;
   notesOpen: boolean;
+  /** Map tool: Hand selects, Cut trips a circuit, Load adds 50 MW at a station, Restore returns a circuit. */
+  tool: 'hand' | 'cut' | 'load' | 'restore';
+  /** Narration panel (templated text, optionally rephrased by an LLM). */
+  narrationOn: boolean;
   auditOpen: boolean;
   governanceOpen: boolean;
   decisions: Record<string, AuditEntry['decision']>;
   audit: AuditEntry[];
   flyTo: { e: number; n: number; distance: number; seq: number } | null;
   toast: { text: string; seq: number } | null;
+  /** Hero connection request: firmness dial (MW), evidence pack open, offer decision. */
+  hero: { dialMW: number | null; evidenceOpen: boolean; decision: AuditEntry['decision'] | null; offeredMW: number | null };
   set(patch: Partial<UiState>): void;
   toggleType(t: AssetType): void;
   record(entry: AuditEntry): void;
@@ -51,12 +57,15 @@ export const useUi = create<UiState>((set) => ({
   selectedBranch: null,
   selectedAgent: null,
   notesOpen: q.has('notes'),
+  tool: 'hand',
+  narrationOn: q.has('narration'),
   auditOpen: q.has('audit'),
   governanceOpen: q.has('governance'),
   decisions: {},
   audit: [],
   flyTo: null,
   toast: null,
+  hero: { dialMW: null, evidenceOpen: q.has('evidence'), decision: null, offeredMW: null },
   set: (patch) => set(patch),
   toggleType: (t) =>
     set((s) => {

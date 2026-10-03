@@ -17,6 +17,7 @@ import { itmToScene, lonLatToItm } from '@/lib/geo';
 import type { Terrain } from '@/scene/terrain/Terrain';
 import { world } from '@/scene/world/uniforms';
 import { useUi } from '@/ui/uiStore';
+import { bridge } from './bridge';
 
 CameraControls.install({ THREE: { Box3, Matrix4, Quaternion, Raycaster, Sphere, Spherical, Vector2, Vector3, Vector4 } });
 
@@ -86,7 +87,11 @@ export const ExploreControls = forwardRef<ControlsHandle>(function ExploreContro
     } else {
       void nationalView(controls);
     }
-    return () => controls.dispose();
+    bridge.controls = controls;
+    return () => {
+      bridge.controls = null;
+      controls.dispose();
+    };
   }, [controls]);
 
   // Fly-to requests from the panels: keep the current heading, settle at a 55 degree view.

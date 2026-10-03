@@ -7,7 +7,7 @@ for (const shot of m3Shots) {
   test(`network: ${shot.name}`, async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
-    await page.goto(`/?${shot.query}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`/?mode=explore&${shot.query}`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => (window as unknown as { __twinNetwork?: boolean }).__twinNetwork === true, null, {
       timeout: 240_000,
     });
