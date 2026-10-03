@@ -9,6 +9,7 @@ import type { ComponentId, SimState } from '../sim/types.ts';
 
 const RAIN = 2600;
 const BOX = 180;
+const FLASH_OFFSET = new THREE.Vector3(-200, 400, -150);
 
 function hash(n: number): number { const s = Math.sin(n * 127.1) * 43758.5453; return s - Math.floor(s); }
 
@@ -26,6 +27,12 @@ export class WeatherFx {
   private boltAt = new THREE.Vector3();
   /** 0 to 1: how bright the sky flash is now (the stage adds it to the exposure). */
   flashLevel = 0;
+  // Scratch objects for the per-frame rain update.
+  private m = new THREE.Matrix4();
+  private v = new THREE.Vector3();
+  private q = new THREE.Quaternion();
+  private e = new THREE.Euler();
+  private sc = new THREE.Vector3();
 
   constructor(private anchors: Map<ComponentId, THREE.Vector3>) {
     this.group.name = 'weather';
@@ -88,7 +95,7 @@ export class WeatherFx {
     if (time < this.boltUntil) flash = Math.max(flash, (this.boltUntil - time) / 0.35);
     this.flashLevel = flash;
     this.flash.intensity = flash * 1.2e6;
-    this.flash.position.copy(target).add(new THREE.Vector3(-200, 400, -150));
+    this.flash.position.copy(target).add(FLASH_OFFSET);
     if (time >= this.boltUntil) this.bolt.visible = false;
     else this.boltMat.opacity = Math.min(1, (this.boltUntil - time) / 0.2);
     // Rain: streaks in a box around the camera target, falling and slanted with the wind.
@@ -97,10 +104,9 @@ export class WeatherFx {
     if (this.rain.visible) {
       const wind = Math.min(1.2, s.C.WIND.windSpeed / 20);
       const fall = 9;
-      const m = new THREE.Matrix4();
-      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -wind * 0.5));
-      const sc = new THREE.Vector3(1, 1 + wind, 1);
-      const v = new THREE.Vector3();
+      const { m, v } = this;
+      const q = this.q.setFromEuler(this.e.set(0, 0, -wind * 0.5));
+      const sc = this.sc.set(1, 1 + wind, 1);
       const n = Math.floor(RAIN * Math.min(1, rain));
       for (let i = 0; i < RAIN; i++) {
         if (i >= n) { m.makeScale(0, 0, 0); this.rain.setMatrixAt(i, m); continue; }

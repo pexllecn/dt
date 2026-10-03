@@ -16,6 +16,8 @@ export interface SimClient {
   tour(action: TourAction): void;
 }
 
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 export function workerClient(): SimClient {
   const worker = new SimWorker();
   let nextId = 1;
@@ -25,9 +27,10 @@ export function workerClient(): SimClient {
     const m = ev.data;
     if (m.type === 'snapshot') {
       snap.value = m.state;
-      clock.value = m.clock;
-      agents.value = m.agents;
-      tour.value = m.tour;
+      // Only changed values are written, so panels that read them do not re-render 15 times a second.
+      if (!sameJson(clock.value, m.clock)) clock.value = m.clock;
+      if (m.agents) agents.value = m.agents;
+      if (!sameJson(tour.value, m.tour)) tour.value = m.tour;
       recordHistory(m.state);
     } else if (m.type === 'previews') {
       previews.value = { forRec: m.forRec, states: m.states as Record<string, SimState> };

@@ -12,6 +12,12 @@ const ARC_LIFE_S = 90;
 
 export class Markers {
   readonly group = new THREE.Group();
+  // Scratch objects for the per-frame update.
+  private m = new THREE.Matrix4();
+  private v = new THREE.Vector3();
+  private q = new THREE.Quaternion();
+  private sc = new THREE.Vector3();
+  private c = new THREE.Color();
   private ids: ComponentId[];
   private pos: THREE.Vector3[];
   private rings: THREE.InstancedMesh;
@@ -53,7 +59,7 @@ export class Markers {
     const k = Math.max(1, viewDist / 140);
     if (!view) return;
     const byId = new Map(view.statuses.map((s) => [s.id, s]));
-    const c = new THREE.Color();
+    const c = this.c;
     this.ids.forEach((id, i) => {
       const st = byId.get(id);
       const level = st?.level ?? 'calm';
@@ -64,7 +70,7 @@ export class Markers {
       this.stems.setColorAt(i, c);
       const s = 1 + fresh * 0.35 + (level === 'calm' ? 0 : 0.25);
       const p = this.pos[i]!;
-      const m = new THREE.Matrix4().compose(p.clone().setY(p.y + (k - 1) * 3), new THREE.Quaternion(), new THREE.Vector3(s * k, k, s * k));
+      const m = this.m.compose(this.v.copy(p).setY(p.y + (k - 1) * 3), this.q, this.sc.set(s * k, k, s * k));
       this.rings.setMatrixAt(i, m);
       this.stems.setMatrixAt(i, m);
     });

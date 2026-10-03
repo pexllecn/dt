@@ -156,7 +156,7 @@ select.compact { font: inherit; font-size: 11.5px; color: var(--ink-2); backgrou
 
 /* ---------- labels ---------- */
 .labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.lbl { position: absolute; transform: translate(-50%, -100%); padding: 3px 7px 3px 7px; font-size: 11px; line-height: 1.25; white-space: nowrap; border-radius: 5px; background: var(--surface); border: 1px solid var(--hair); box-shadow: var(--shadow); pointer-events: auto; cursor: pointer; transition: opacity var(--t-fast) var(--ease); }
+.lbl { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); padding: 3px 7px 3px 7px; font-size: 11px; line-height: 1.25; white-space: nowrap; border-radius: 5px; background: var(--surface); border: 1px solid var(--hair); box-shadow: var(--shadow); pointer-events: auto; cursor: pointer; transition: opacity var(--t-fast) var(--ease); }
 .lbl::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 1px; height: 7px; background: var(--hair-strong); }
 .lbl b { font-weight: 500; } .lbl span { color: var(--ink-2); margin-left: 6px; }
 .lbl.sel { border-color: var(--ink); }
