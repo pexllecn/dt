@@ -28,6 +28,8 @@ export interface UiState {
   tool: 'hand' | 'cut' | 'load' | 'restore';
   /** Narration panel (templated text, optionally rephrased by an LLM). */
   narrationOn: boolean;
+  /** Wind streamlines over the map. */
+  windOn: boolean;
   auditOpen: boolean;
   governanceOpen: boolean;
   decisions: Record<string, AuditEntry['decision']>;
@@ -59,6 +61,7 @@ export const useUi = create<UiState>((set) => ({
   notesOpen: q.has('notes'),
   tool: 'hand',
   narrationOn: q.has('narration'),
+  windOn: q.has('wind'),
   auditOpen: q.has('audit'),
   governanceOpen: q.has('governance'),
   decisions: {},

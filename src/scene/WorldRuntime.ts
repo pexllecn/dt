@@ -27,6 +27,7 @@ import { AssetLayer } from './assets/AssetLayer';
 import { Sites } from './assets/Sites';
 import { dataCentreClusters, northWestLargeUser } from '@/config/system';
 import { useUi } from '@/ui/uiStore';
+import { Weather, weather, weatherFor } from './weather/Weather';
 import { scenarios } from '@/sim/scenarios';
 import { sampleBranch, useSim } from '@/sim/client';
 import type { ModelMeta } from '@/sim/protocol';
@@ -47,6 +48,8 @@ export class WorldRuntime {
   readonly scene: Scene;
   readonly terrain: Terrain;
   readonly ocean: Ocean;
+  readonly weather = new Weather();
+  private wxClock = performance.now();
   readonly sun = new DirectionalLight(0xffffff, 2);
   readonly fill = new DirectionalLight(0xffffff, 0.4);
   private readonly camera: PerspectiveCamera;
@@ -82,7 +85,7 @@ export class WorldRuntime {
     this.renderer = renderer;
     this.terrain = new Terrain(store);
     this.ocean = new Ocean(renderer.reversedDepthBuffer === true);
-    scene.add(this.terrain.group, this.ocean.mesh);
+    scene.add(this.terrain.group, this.ocean.mesh, this.weather.group);
     this.ocean.mesh.visible = !debugFlags.has('noocean');
 
     renderer.toneMapping = AgXToneMapping;
@@ -261,6 +264,23 @@ export class WorldRuntime {
       cam.far = 6_000_000;
       cam.updateProjectionMatrix();
     }
+
+    // Weather follows the scenario script and the clock.
+    const simInputs = useSim.getState().inputs;
+    const wx = weatherFor(simInputs.scenario, state.hours, scenarios[simInputs.scenario].front);
+    const toward = ((wx.windFromDeg + 180) * Math.PI) / 180;
+    // Ease on the wall clock (not the capped frame time) so slow frames do not stall it.
+    const now = performance.now();
+    const k = 1 - Math.exp(-(Math.max(0, now - this.wxClock) / 1000) * 0.8);
+    this.wxClock = now;
+    weather.cloud.value += (wx.cloud - weather.cloud.value) * k;
+    weather.rain.value += (wx.rain - weather.rain.value) * k;
+    weather.windTo.value.set(Math.sin(toward), -Math.cos(toward));
+    weather.windMs.value = wx.ms * simInputs.windScale;
+    const streamsGoal = useUi.getState().windOn ? 1 : 0;
+    weather.streams.value += (streamsGoal - weather.streams.value) * Math.min(1, k * 2.5);
+    this.weather.group.visible = !debugFlags.has('noweather');
+    this.weather.setVisibility(altitude, ex);
 
     this.terrain.update(cam);
     this.updateNetwork(state.hours, dt);

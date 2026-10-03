@@ -58,6 +58,8 @@ interface Polyline {
   length: number;
   kv: number;
   cable: boolean;
+  /** Bounding box in scene x, z (for laying out particles only near the view). */
+  box: [number, number, number, number];
 }
 
 export interface NetworkFrame {
@@ -121,7 +123,8 @@ export class NetworkLayer {
   private particleDir!: InstancedBufferAttribute;
   private readonly offsets: Float64Array;
   private spacing = 0;
-  private particleSlots: { line: number; base: number }[] = [];
+  private particleSlots: { line: number; base: number; seg: number }[] = [];
+  private layoutAt = { x: 0, z: 0, r: Infinity };
   private refreshTimer = 0;
   private readonly heightAt: (x: number, z: number) => number;
   readonly ribbonMaterial: MeshBasicNodeMaterial;
@@ -170,7 +173,18 @@ export class NetworkLayer {
       const cum = new Float64Array(P.length / 2);
       for (let k = 1; k < cum.length; k++) cum[k] = cum[k - 1]! + Math.hypot(P[k * 2]! - P[k * 2 - 2]!, P[k * 2 + 1]! - P[k * 2 - 1]!);
       const nbr = netBranch.get(bm.id);
+      let x0 = Infinity;
+      let x1 = -Infinity;
+      let z0 = Infinity;
+      let z1 = -Infinity;
+      for (let k = 0; k < P.length; k += 2) {
+        x0 = Math.min(x0, P[k]!);
+        x1 = Math.max(x1, P[k]!);
+        z0 = Math.min(z0, P[k + 1]!);
+        z1 = Math.max(z1, P[k + 1]!);
+      }
       this.lines.push({
+        box: [x0, x1, z0, z1],
         branch: i,
         pts: P,
         cum,
@@ -357,13 +371,22 @@ export class NetworkLayer {
     this.ribbonB.needsUpdate = true;
   }
 
-  private layoutParticles(spacing: number) {
+  /**
+   * Particles are laid out only on circuits within reach of the view (all of them at national
+   * scale), so a close-up view does not move tens of thousands of particles off screen.
+   */
+  private layoutParticles(spacing: number, cx: number, cz: number, r: number) {
     this.spacing = spacing;
+    this.layoutAt = { x: cx, z: cz, r };
     this.particleSlots = [];
     for (let li = 0; li < this.lines.length; li++) {
       const l = this.lines[li]!;
+      const [x0, x1, z0, z1] = l.box;
+      const dx = Math.max(0, x0 - cx, cx - x1);
+      const dz = Math.max(0, z0 - cz, cz - z1);
+      if (dx * dx + dz * dz > r * r) continue;
       const n = Math.max(1, Math.floor(l.length / spacing));
-      for (let k = 0; k < n && this.particleSlots.length < this.maxParticles; k++) this.particleSlots.push({ line: li, base: k * (l.length / n) });
+      for (let k = 0; k < n && this.particleSlots.length < this.maxParticles; k++) this.particleSlots.push({ line: li, base: k * (l.length / n), seg: 0 });
     }
     this.particleGeo.instanceCount = this.particleSlots.length;
   }
@@ -422,7 +445,12 @@ export class NetworkLayer {
 
     // Particle spacing follows the viewing scale so the flow reads at every zoom.
     const want = Math.min(26_000, Math.max(260, altitude * 0.032));
-    if (!this.spacing || Math.abs(Math.log(want / this.spacing)) > 0.5) this.layoutParticles(want);
+    const reach = altitude > 120_000 ? Infinity : Math.max(60_000, altitude * 14);
+    const cx = camera.position.x;
+    const cz = camera.position.z;
+    const moved = Math.hypot(cx - this.layoutAt.x, cz - this.layoutAt.z);
+    if (!this.spacing || Math.abs(Math.log(want / this.spacing)) > 0.5 || reach !== this.layoutAt.r && (reach === Infinity || this.layoutAt.r === Infinity) || moved > reach * 0.25 || Math.abs(Math.log(reach / this.layoutAt.r)) > 0.7)
+      this.layoutParticles(want, cx, cz, reach);
 
     // Advance each branch's particle phase: speed proportional to MW (spacings per second).
     for (let i = 0; i < this.nb; i++) {
@@ -432,19 +460,16 @@ export class NetworkLayer {
     }
     const P = this.particlePos.array as Float32Array;
     const D = this.particleDir.array as Float32Array;
-    void camera;
     this.particleSlots.forEach((slot, idx) => {
       const l = this.lines[slot.line]!;
       let s = (slot.base + this.offsets[l.branch]!) % l.length;
       if (s < 0) s += l.length;
-      // binary search on cumulative length
-      let lo = 0;
-      let hi = l.cum.length - 1;
-      while (hi - lo > 1) {
-        const mid = (lo + hi) >> 1;
-        if (l.cum[mid]! <= s) lo = mid;
-        else hi = mid;
-      }
+      // Particles move a little each frame: walk from the segment found last time.
+      let lo = Math.min(slot.seg, l.cum.length - 2);
+      while (lo > 0 && l.cum[lo]! > s) lo--;
+      while (lo < l.cum.length - 2 && l.cum[lo + 1]! <= s) lo++;
+      slot.seg = lo;
+      const hi = lo + 1;
       const segLen = l.cum[hi]! - l.cum[lo]! || 1;
       const t = (s - l.cum[lo]!) / segLen;
       const ax = l.pts[lo * 2]!;

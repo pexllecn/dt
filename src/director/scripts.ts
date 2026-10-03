@@ -374,6 +374,7 @@ export const scripts: Record<ScenarioId, Script> = {
           ensure('storm');
           panels();
           select(null);
+          ui().set({ windOn: true });
         },
         caption: '18 November. A deep Atlantic low reaches the west coast, gusting past turbine cut-out.',
         narration: 'November. A deep Atlantic low reaches the west coast. Gusts take some turbines past their cut-out speed.',
@@ -386,6 +387,10 @@ export const scripts: Record<ScenarioId, Script> = {
         hours: 11.6,
         timeTo: 11.95,
         hold: 11,
+        enter: () => {
+          ensure('storm');
+          ui().set({ windOn: false });
+        },
         caption: '11:45. Communications to the north west are lost. Agents there hold their last known values, and say so.',
         narration: 'At a quarter to twelve, communications to the north west are lost. The agents there keep their last known values and mark them as stale.',
       },

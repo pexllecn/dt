@@ -59,7 +59,8 @@ export function DirectorRuntime() {
     let last = performance.now();
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
-      const dt = Math.min(0.1, (now - last) / 1000);
+      // Clamp: a clock change (or a long pause) must never run the beat clock backwards.
+      const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
       last = now;
       const d = useDirector.getState();
       if (d.mode !== 'director' || !d.playing || !useWorld.getState().ready) return;

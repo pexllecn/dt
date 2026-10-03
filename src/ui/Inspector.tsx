@@ -2,7 +2,6 @@ import { useWorld } from '@/app/store';
 import { useSim } from '@/sim/client';
 import { SourceTag } from './SourceTag';
 import { fmtHour, sevRank, useUi } from './uiStore';
-import { useTick } from './useTick';
 
 const W = 278;
 const H = 74;
@@ -33,8 +32,9 @@ function Sparkline({ intact, n1, hours }: { intact: number[]; n1: number[]; hour
 
 /** Asset inspector for the selected line, cable or transformer. */
 export function Inspector() {
-  useTick(300);
   const ui = useUi();
+  // Re-render when the 15-minute interval changes, not on a timer.
+  const hours = useWorld((s) => Math.min(95, Math.floor(s.hours * 4))) / 4;
   const meta = useSim((s) => s.meta);
   const day = useSim((s) => s.day);
   const agents = useSim((s) => s.agents);
@@ -46,7 +46,6 @@ export function Inspector() {
   if (i < 0) return null;
   const b = meta.branches[i]!;
   const nb = meta.branches.length;
-  const hours = useWorld.getState().hours;
   const s = Math.min(95, Math.floor(hours * 4));
   const intact = Array.from({ length: 96 }, (_, k) => day.loading[k * nb + i]!);
   const n1 = Array.from({ length: 96 }, (_, k) => day.n1Loading[k * nb + i]!);

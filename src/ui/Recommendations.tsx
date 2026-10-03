@@ -3,7 +3,6 @@ import { useWorld } from '@/app/store';
 import { useSim } from '@/sim/client';
 import type { Recommendation } from '@/agents/engine';
 import { fmtHour, useUi } from './uiStore';
-import { useTick } from './useTick';
 
 function inputsHash(obj: unknown): string {
   const s = JSON.stringify(obj);
@@ -17,7 +16,6 @@ function inputsHash(obj: unknown): string {
  * Approve, Reject or Modify; every decision goes to the audit trail.
  */
 export function Recommendations() {
-  useTick(400);
   const agents = useSim((s) => s.agents);
   const inputs = useSim((s) => s.inputs);
   const meta = useSim((s) => s.meta);
@@ -25,7 +23,8 @@ export function Recommendations() {
   const ui = useUi();
   const [scale, setScale] = useState(1);
   const [modifying, setModifying] = useState(false);
-  const hours = useWorld.getState().hours;
+  // Re-render when the 15-minute interval changes, not on a timer.
+  const hours = useWorld((s) => Math.min(95, Math.floor(s.hours * 4))) / 4;
   if (!agents || !meta || inputs.scenario === 'hero' || inputs.scenario === 'y2034') return null;
   const step = Math.floor(hours * 4);
   const pending = agents.recommendations.filter((r) => r.step <= step && !ui.decisions[r.id] && !inputs.adjustments.some((a) => a.fromHour === r.step / 4));

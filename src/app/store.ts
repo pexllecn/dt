@@ -58,6 +58,11 @@ export const frameStats = {
   frameMs: 0,
   gpuMs: 0,
   drawCalls: 0,
+  /** Current device pixel ratio (adaptive resolution). */
+  dpr: 1,
+  /** Main-thread milliseconds per frame in the world update and in render submission (averaged). */
+  updateMs: 0,
+  submitMs: 0,
   triangles: 0,
   terrainNodes: 0,
   altitude: 0,

@@ -2,7 +2,6 @@ import { useWorld } from '@/app/store';
 import { useSim } from '@/sim/client';
 import { scenarios, type ScenarioId } from '@/sim/scenarios';
 import { fmtHour, useUi } from './uiStore';
-import { useTick } from './useTick';
 import { useDirector } from '@/director/store';
 
 const swatch: Record<ScenarioId, string> = { today: '#c9c3b5', hero: '#a8231b', storm: '#4f5d6b', y2034: '#a86a12' };
@@ -34,7 +33,6 @@ function Slider(props: { label: string; left: string; right: string; min: number
 
 /** Right panel: scenario swatches and sliders, each bound to a real model input. */
 export function SpecimenPanel() {
-  useTick(500);
   const inputs = useSim((s) => s.inputs);
   const setInputs = useSim((s) => s.setInputs);
   const applyScenario = useSim((s) => s.applyScenario);
@@ -44,7 +42,8 @@ export function SpecimenPanel() {
   const sc = scenarios[inputs.scenario];
   const year = inputs.year ?? sc.year;
   const ic = inputs.icShare ?? sc.icShare;
-  const hours = useWorld.getState().hours;
+  // Re-render when the 15-minute interval changes, not on a timer.
+  const hours = useWorld((s) => Math.min(95, Math.floor(s.hours * 4))) / 4;
   const mode = useDirector((s) => s.mode);
   if (ui.selectedBranch || mode === 'director') return null;
 

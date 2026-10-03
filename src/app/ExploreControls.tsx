@@ -18,6 +18,7 @@ import type { Terrain } from '@/scene/terrain/Terrain';
 import { world } from '@/scene/world/uniforms';
 import { useUi } from '@/ui/uiStore';
 import { bridge } from './bridge';
+import { applyFace, caveFace } from '@/cave/cave';
 
 CameraControls.install({ THREE: { Box3, Matrix4, Quaternion, Raycaster, Sphere, Spherical, Vector2, Vector3, Vector4 } });
 
@@ -54,6 +55,7 @@ export const ExploreControls = forwardRef<ControlsHandle>(function ExploreContro
   const controls = useMemo(() => new CameraControls(camera as PerspectiveCamera, gl.domElement), [camera, gl]);
   const terrainRef = useMemo(() => ({ current: null as Terrain | null }), []);
   const tmp = useMemo(() => new Vector3(), []);
+  const faceTarget = useMemo(() => new Vector3(), []);
 
   useEffect(() => {
     controls.minDistance = 150;
@@ -122,16 +124,23 @@ export const ExploreControls = forwardRef<ControlsHandle>(function ExploreContro
   useImperativeHandle(
     ref,
     () => ({
-      target: () => controls.getTarget(tmp),
+      target: () => (caveFace ? faceTarget : controls.getTarget(tmp)),
       setTerrain: (t: Terrain) => {
         terrainRef.current = t;
       },
       controls,
     }),
-    [controls, terrainRef, tmp],
+    [controls, terrainRef, tmp, faceTarget],
   );
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
+    if (caveFace) {
+      // Immersive face: the master window drives the eye; no local navigation.
+      controls.enabled = false;
+      const t = applyFace(camera as PerspectiveCamera, state.size.width / Math.max(1, state.size.height));
+      if (t) faceTarget.copy(t);
+      return;
+    }
     controls.update(delta);
     const t = terrainRef.current;
     if (!t) return;

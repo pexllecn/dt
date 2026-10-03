@@ -10,7 +10,7 @@ const SCENARIO_KEYS: Record<string, ScenarioId> = { '1': 'today', '2': 'hero', '
 /**
  * Presenter keys. Director mode: Space play or pause, Left/Right beats, 1 to 4 scripts.
  * Explore mode: Space time-lapse, Left/Right a quarter hour, 1 to 4 scenarios.
- * Both: D Director or Explore, R reset, T theme, N narration, F fullscreen, ` debug, Esc closes panels.
+ * Both: D Director or Explore, R reset, T theme, N narration, W wind, F fullscreen, ` debug, Esc closes panels.
  */
 export function useKeys() {
   useEffect(() => {
@@ -55,6 +55,9 @@ export function useKeys() {
         case 'd':
           if (director) dir.set({ mode: 'explore', playing: false });
           else dir.set({ mode: 'director', script: sim.inputs.scenario, beat: 0, seq: dir.seq + 1, playing: false });
+          break;
+        case 'w':
+          ui.set({ windOn: !ui.windOn });
           break;
         case '`':
           s.toggleDebug();

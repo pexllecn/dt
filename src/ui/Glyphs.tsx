@@ -4,7 +4,6 @@ import { useWorld } from '@/app/store';
 import { REGION_W } from '@/agents/engine';
 import { useSim } from '@/sim/client';
 import { useUi } from './uiStore';
-import { useTick } from './useTick';
 
 const MAX = 80;
 
@@ -13,14 +12,14 @@ const MAX = 80;
  * time, so attention follows the map. Positions are projected every frame without re-rendering.
  */
 export function Glyphs() {
-  useTick(400);
   const meta = useSim((s) => s.meta);
   const agents = useSim((s) => s.agents);
   const inputs = useSim((s) => s.inputs);
   const maturity = useUi((s) => s.maturity);
   const selectedAgent = useUi((s) => s.selectedAgent);
   const refs = useRef(new Map<string, HTMLButtonElement>());
-  const hours = useWorld.getState().hours;
+  // Re-render when the 15-minute interval changes, not on a timer.
+  const hours = useWorld((s) => Math.min(95, Math.floor(s.hours * 4))) / 4;
   const step = Math.min(95, Math.floor(hours * 4));
   const stale = inputs.commsLostFromHour !== null && hours >= inputs.commsLostFromHour;
 
