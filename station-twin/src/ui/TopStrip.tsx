@@ -2,7 +2,7 @@
 import { BRANDING } from '../config/branding.ts';
 import { CLOCK, RATINGS, SITE } from '../config/assumptions.ts';
 import { clockLabel, compressionLabel } from '../lib/format.ts';
-import { clock, lens, methodOpen, snap, theme } from '../app/store.ts';
+import { clock, lens, methodOpen, sankeyOpen, snap, theme, tour } from '../app/store.ts';
 import type { SimClient } from '../app/client.ts';
 import { Icon } from './icons.tsx';
 
@@ -48,7 +48,7 @@ export function TopStrip({ client }: { client: SimClient }) {
         <span class="k">Renewables</span>
         <span class="v num">{s.results.renewPct.toFixed(0)}%</span>
       </div>
-      <div class="cell opt" title="Local generation against local demand">
+      <div class="cell opt click" title="Local generation against local demand. Click for the supply and demand diagram." onClick={() => (sankeyOpen.value = true)}>
         <span class="k">Local supply</span>
         <span class="v num">{s.results.localGeneration.toFixed(0)}<small>of {s.results.localDemand.toFixed(0)} MW ({localPct.toFixed(0)}%)</small></span>
       </div>
@@ -66,6 +66,7 @@ export function TopStrip({ client }: { client: SimClient }) {
         <button class={lens.value === 'flow' ? 'on' : ''} role="tab" aria-selected={lens.value === 'flow'} title="Flow: power flow, loading and thermography (2)" onClick={() => (lens.value = 'flow')}>Flow</button>
         <button class={lens.value === 'circuit' ? 'on' : ''} role="tab" aria-selected={lens.value === 'circuit'} title="Circuit: the single-line diagram (3)" onClick={() => (lens.value = 'circuit')}>Circuit</button>
       </div>
+      <button class={`btn tourbtn ${tour.value ? 'on' : ''}`} title="Guided tour (Right arrow)" onClick={() => client.tour(tour.value ? 'stop' : 'start')}>{tour.value ? 'End tour' : 'Tour'}</button>
       <button class="iconbtn" title="Method and assumptions (M)" aria-label="Method and assumptions" onClick={() => (methodOpen.value = true)}><Icon name="info" /></button>
       <button class={`iconbtn ${theme.value === 'control' ? 'on' : ''}`} style={{ marginLeft: '6px' }} title="Theme: Daylight or Control Room (T)" aria-label="Toggle theme" onClick={() => (theme.value = theme.value === 'daylight' ? 'control' : 'daylight')}>
         <Icon name={theme.value === 'control' ? 'moon' : 'sun'} />

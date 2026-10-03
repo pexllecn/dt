@@ -6,6 +6,7 @@ import type { ComponentId, SimState } from '../sim/types.ts';
 import type { Theme } from '../scene/sky.ts';
 import type { Lens } from '../scene/stage.ts';
 import type { AgentView } from '../agents/types.ts';
+import type { TourStatus } from '../tour/tour.ts';
 
 export const snap = signal<SimState | null>(null);
 export const clock = signal<ClockState>({ compression: 120, effective: 120, paused: false });
@@ -13,6 +14,9 @@ export const selected = signal<ComponentId | null>(null);
 export const theme = signal<Theme>('daylight');
 export const lens = signal<Lens>('physical');
 export const agents = signal<AgentView | null>(null);
+export const tour = signal<TourStatus | null>(null);
+export const paletteOpen = signal(false);
+export const sankeyOpen = signal(false);
 /** Predicted end states of the newest recommendation's options, for the ghost preview. */
 export const previews = signal<{ forRec: string | null; states: Record<string, SimState> }>({ forRec: null, states: {} });
 /** Option being previewed (hover), as recommendation and option id. */

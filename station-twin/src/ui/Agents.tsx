@@ -211,7 +211,7 @@ export function AuditPanel() {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
   return (
-    <div class="modal" role="dialog" aria-label="Audit log" onClick={(e) => e.target === e.currentTarget && (auditOpen.value = false)}>
+    <div class="backdrop" role="dialog" aria-label="Audit log" onClick={(e) => e.target === e.currentTarget && (auditOpen.value = false)}>
       <div class="audit panel">
         <header>
           <h3>Audit log</h3>

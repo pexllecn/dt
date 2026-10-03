@@ -127,7 +127,8 @@ export class AgentSystem {
         if (fires) set.add(rule.id); else set.delete(rule.id);
         if (!this.reported(rule)) continue;
         changed = true;
-        this.emit(s.t, def.id, rule, input, fires ? 'fired' : 'cleared');
+        // Information-level rules show on the asset's card, not in the feed.
+        if (rule.severity !== 'info') this.emit(s.t, def.id, rule, input, fires ? 'fired' : 'cleared');
       }
       const reportedActive = [...set].filter((id) => { const r = (def.rules() as readonly AnyRule[]).find((x) => x.id === id)!; return this.reported(r); });
       const level = reportedActive.reduce<AgentStatus['level']>((lv, id) => {

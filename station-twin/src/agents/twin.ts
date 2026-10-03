@@ -15,7 +15,8 @@ export type Decision =
   | { type: 'reject'; recId: string; operator: string }
   | { type: 'modify'; recId: string; optionId: string; value: number; operator: string }
   | { type: 'confirmClear'; section: 'A' | 'B'; operator: string }
-  | { type: 'ruleset'; mode: RuleSetMode };
+  | { type: 'ruleset'; mode: RuleSetMode }
+  | { type: 'rewind'; t: number };
 
 export class Twin {
   engine: Engine;
@@ -25,7 +26,10 @@ export class Twin {
   wall: () => string = () => new Date().toISOString();
   fast = false;
 
+  private opts: EngineOptions;
+
   constructor(opts: EngineOptions = {}) {
+    this.opts = opts;
     this.engine = new Engine(opts);
     this.agents.observe(this.engine.s, 0);
     this.coord.tick(this.engine, this.agents, { fast: false });
@@ -85,7 +89,27 @@ export class Twin {
       case 'modify': return this.coord.modify(this.engine, this.agents, d.recId, d.optionId, d.value, d.operator, this.wall(), hashOf, mode, h);
       case 'confirmClear': return this.coord.confirmClear(this.engine, this.agents, d.section, d.operator, this.wall(), hashOf, mode, h);
       case 'ruleset': this.agents.mode = d.mode; return { ok: true };
+      case 'rewind': return this.rewind(d.t);
     }
+  }
+
+  /** Go back in time by replaying the input log from the start (deterministic, so the past is exact). */
+  rewind(t: number): { ok: boolean; reason?: string } {
+    if (t >= this.engine.s.t) return { ok: false, reason: 'Use fast-forward to go forward.' };
+    const log = this.engine.inputLog.filter((e) => e.t <= t).map((e) => ({ t: e.t, cmd: structuredClone(e.cmd) }));
+    const mode = this.agents.mode;
+    this.engine = new Engine(this.opts);
+    this.agents.reset();
+    this.coord.reset();
+    this.agents.mode = mode;
+    this.agents.observe(this.engine.s, 0);
+    for (const e of log) {
+      this.runUntil(e.t);
+      // Fast-forwards replay as plain runs, so the clock is not left time-lapsing.
+      if (e.cmd.type !== 'fastForward') this.command(e.cmd);
+    }
+    this.runUntil(t);
+    return { ok: true };
   }
 
   view(): AgentView {

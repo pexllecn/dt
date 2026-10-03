@@ -169,7 +169,8 @@ export function plan(state: SimState, id: string, trigger: string, focus: Compon
   const options: Option[] = useful.map((x, i) => ({ ...x.c, rank: i + 1, outcome: strip(x.o) }));
   const previews: Record<string, unknown> = { none: base.endState };
   for (const x of useful) previews[x.c.id] = x.o.endState;
-  const rec: Recommendation = { id, createdT: state.t, trigger, focus, problem, horizonS, options, baseline: strip(base), status: 'pending', chosen: null, methods, advisory: false };
+  // With nothing better than doing nothing there is no decision to make: the look-ahead is reported, not offered.
+  const rec: Recommendation = { id, createdT: state.t, trigger, focus, problem, horizonS, options, baseline: strip(base), status: options.length ? 'pending' : 'completed', chosen: null, methods, advisory: options.length === 0 };
   return { rec, previews };
 }
 
@@ -254,13 +255,15 @@ export class Coordinator {
   private lastKey = '';
   private rejectedKey = '';
   private recSeq = 0;
+  /** Recommendations made since reset. */
+  get recommendationCount(): number { return this.recSeq; }
   private auditSeq = 0;
   private trackedLogLength = 0;
   private trackingSample = 0;
 
   reset(): void {
     this.state = { screen: null, recommendations: [], tracking: null, audit: [], earlyCatch: null, previews: {}, previewFor: null };
-    this.lastScreen = -1e9; this.lastPlanT = -1e9; this.lastKey = ''; this.rejectedKey = ''; this.trackingSample = 0;
+    this.lastScreen = -1e9; this.lastPlanT = -1e9; this.lastKey = ''; this.rejectedKey = ''; this.trackingSample = 0; this.recSeq = 0;
   }
 
   tick(engine: Engine, agents: AgentSystem, opts: { fast: boolean }): void {

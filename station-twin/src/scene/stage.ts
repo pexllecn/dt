@@ -21,6 +21,7 @@ import { buildSurroundings, type Surroundings } from './surroundings.ts';
 import { FlowLayer } from './flow.ts';
 import { FoldLayer } from './fold.ts';
 import { Markers } from './markers.ts';
+import { WeatherFx } from './weather.ts';
 import type { AgentView } from '../agents/types.ts';
 import { SCHEM_CENTRE, SCHEM_EXTENT } from './schematic.ts';
 import { buildYard, terrainHeight } from './yard.ts';
@@ -80,6 +81,7 @@ export class Stage {
   flow!: FlowLayer;
   fold!: FoldLayer;
   markers!: Markers;
+  weather!: WeatherFx;
   agentView: AgentView | null = null;
   /** A predicted state to show as a ghost (hovering a recommendation option). */
   preview: SimState | null = null;
@@ -162,6 +164,8 @@ export class Stage {
     this.scene.add(this.fold.group);
     this.markers = new Markers(this.station.anchors);
     this.scene.add(this.markers.group);
+    this.weather = new WeatherFx(this.station.anchors);
+    this.scene.add(this.weather.group);
     // Every physical material can dissolve during the fold.
     this.terrain = yard.group.children.filter((o) => (o as THREE.Mesh).material === this.materials.grass);
     const seen = new Set<THREE.Material>();
@@ -448,6 +452,14 @@ export class Stage {
     void this.controls.setLookAt(c.x + Math.sin(az) * dist, y, c.z + Math.cos(az) * dist, c.x, Math.max(2, c.y * 0.8), c.z, true);
   }
 
+  /** A camera move for the guided tour, taking about `seconds` (0: immediate). */
+  flyPath(target: [number, number, number], from: [number, number, number], seconds: number): void {
+    if (this.foldP() > 0) return;
+    this.controls.smoothTime = seconds > 0 ? seconds / 4 : 0.45;
+    void this.controls.setLookAt(from[0], from[1], from[2], target[0], target[1], target[2], seconds > 0);
+    if (seconds > 0) setTimeout(() => (this.controls.smoothTime = 0.45), seconds * 1000);
+  }
+
   /** Close-up from a fixed direction (used for capture and the guided tour). */
   view(target: [number, number, number], from: [number, number, number], smooth = true): void {
     void this.controls.setLookAt(from[0], from[1], from[2], target[0], target[1], target[2], smooth);
@@ -595,6 +607,9 @@ export class Stage {
       this.flow.update(this.preview ?? this.state, dt);
       this.markers.update(this.agentView, this.state.t, this.time, viewDist);
       this.markers.group.visible = this.fold.controller.p === 0;
+      this.weather.update(this.state, this.time, this.controls.getTarget(new THREE.Vector3()));
+      this.weather.group.visible = this.fold.controller.p === 0;
+      this.renderer.toneMappingExposure = 0.6 * (1 + this.weather.flashLevel * 1.8);
       const wasMoving = this.fold.controller.moving;
       this.fold.update(this.state, dt);
       this.updateFold(wasMoving);

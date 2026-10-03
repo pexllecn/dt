@@ -18,9 +18,11 @@ import { Dock } from '../ui/Dock.tsx';
 import { Inspector } from '../ui/Inspector.tsx';
 import { Badge, Confirm, Debug, DockToggle, FlowLegend, Keys, Method, Toast } from '../ui/Overlays.tsx';
 import { AuditPanel, clientRef, Feed, RecommendationCard } from '../ui/Agents.tsx';
+import { CommandPalette, Sankey, Timeline, TourCaption } from '../ui/Presenter.tsx';
+import { BEATS } from '../tour/tour.ts';
 import { TopStrip } from '../ui/TopStrip.tsx';
 import { localClient, workerClient, type SimClient } from './client.ts';
-import { agents, auditOpen, clock, confirmReq, debugOpen, dockOpen, hovered, lens, methodOpen, previews, selected, snap, theme, toast } from './store.ts';
+import { agents, auditOpen, logOpen, paletteOpen, sankeyOpen, tour, clock, confirmReq, debugOpen, dockOpen, hovered, lens, methodOpen, previews, selected, snap, theme, toast } from './store.ts';
 
 const params = new URLSearchParams(location.search);
 const capture = params.has('capture');
@@ -35,6 +37,10 @@ function App({ client, stage }: { client: SimClient; stage: Stage }) {
       <Inspector client={client} onFrame={(id) => stage.flyTo(id, true)} />
       <Toast />
       <Feed onFly={(id) => { selected.value = id; stage.flyTo(id); }} />
+      <Timeline client={client} onFly={(id) => stage.flyTo(id)} />
+      <TourCaption client={client} />
+      <CommandPalette client={client} onFly={(id) => stage.flyTo(id)} />
+      <Sankey />
       <RecommendationCard />
       <AuditPanel />
       <Badge />
@@ -111,11 +117,38 @@ async function boot(): Promise<void> {
   appRoot.style.display = 'contents';
   ui.appendChild(appRoot);
   clientRef.current = client;
+  // For end-to-end checks: read-only access to the live stores.
+  (window as unknown as { __store: unknown }).__store = { agents, tour, snap };
   render(<App client={client} stage={stage} />, appRoot);
 
   // Signals to the stage.
   effect(() => { const s = snap.value; if (s) stage.setState(s); });
   effect(() => { stage.agentView = agents.value; });
+  // Guided tour: each beat sets the lens, selection, feed and camera path.
+  let lastBeat = -1;
+  let shotTimer: ReturnType<typeof setTimeout> | null = null;
+  effect(() => {
+    const t = tour.value;
+    const beat = t ? t.beat : -1;
+    if (beat === lastBeat) return;
+    lastBeat = beat;
+    if (shotTimer) clearTimeout(shotTimer);
+    if (!t) return;
+    const b = BEATS[beat]!;
+    dockOpen.value = false;
+    lens.value = b.lens;
+    selected.value = b.select;
+    logOpen.value = true;
+    const shots = b.shots;
+    const fly = (i: number) => {
+      const sh = shots[i];
+      if (!sh) return;
+      stage.flyPath(sh.target, sh.from, capture ? 0 : sh.seconds ?? 3);
+      if (!capture) shotTimer = setTimeout(() => fly(i + 1), (sh.seconds ?? 3) * 1000 + 400);
+      else fly(i + 1);
+    };
+    fly(0);
+  });
   // Ghost preview: hovering an option shows its predicted end state in the scene.
   effect(() => {
     const h = hovered.value;
@@ -153,10 +186,15 @@ async function boot(): Promise<void> {
 
   // Keyboard (presenter keys from the plan, those available in milestone 3).
   window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); paletteOpen.value = !paletteOpen.value; return; }
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (paletteOpen.value) return;
     if (confirmReq.value) { if (e.key === 'Escape') confirmReq.value = null; return; }
     switch (e.key) {
       case ' ': e.preventDefault(); client.setClock({ paused: !clock.value.paused }); break;
+      case 'ArrowRight': e.preventDefault(); client.tour(tour.value ? 'next' : 'start'); break;
+      case 'ArrowLeft': e.preventDefault(); if (tour.value) client.tour('prev'); break;
+      case 'a': case 'A': logOpen.value = !logOpen.value; break;
       case '1': lens.value = 'physical'; break;
       case '2': lens.value = 'flow'; break;
       case '3': lens.value = 'circuit'; break;
@@ -167,7 +205,7 @@ async function boot(): Promise<void> {
       case 'h': case 'H': selected.value = null; stage.overview(); break;
       case 'f': case 'F': if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen(); break;
       case 'r': case 'R': confirmReq.value = { title: 'Reset to baseline?', body: 'The station returns to 12:00 on a normal day.', action: 'Reset', run: () => void client.command({ type: 'scenario', id: 'reset' }).then((r) => (toast.value = { result: r, key: Date.now() })) }; break;
-      case 'Escape': if (methodOpen.value) methodOpen.value = false; else selected.value = null; break;
+      case 'Escape': if (sankeyOpen.value) sankeyOpen.value = false; else if (auditOpen.value) auditOpen.value = false; else if (methodOpen.value) methodOpen.value = false; else selected.value = null; break;
     }
   });
 
@@ -184,6 +222,10 @@ async function boot(): Promise<void> {
   }
   if (params.has('method')) methodOpen.value = true;
   if (params.has('audit')) auditOpen.value = true;
+  if (params.has('sankey')) sankeyOpen.value = true;
+  if (params.has('palette')) paletteOpen.value = true;
+  const tb = params.get('tour');
+  if (tb !== null) { client.tour('start'); for (let i = 0; i < Number(tb || 0); i++) client.tour('next'); if (params.has('tourRun')) client.tour('run'); }
   const pv = params.get('preview');
   if (pv) { const r = agents.value?.recommendations.find((x) => x.status === 'pending'); const o = r?.options[Number(pv) - 1]; if (r && o) hovered.value = { recId: r.id, optionId: o.id }; }
 
