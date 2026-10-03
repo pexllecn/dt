@@ -1,14 +1,20 @@
 /** Scenario library, grouped as in the prototype, with line icons and severity markers. */
 import { SCENARIOS, type ScenarioId } from '../sim/scenarios.ts';
 import type { SimClient } from '../app/client.ts';
-import { confirmReq, dockOpen, toast } from '../app/store.ts';
+import { confirmReq, dockOpen, selected, toast } from '../app/store.ts';
+import type { ComponentId } from '../sim/types.ts';
 import { Icon } from './icons.tsx';
 
-export function Dock({ client }: { client: SimClient }) {
+/** Scenarios that build plant: after building, the camera goes there so the new plant is seen appearing. */
+const BUILDS: Partial<Record<ScenarioId, ComponentId>> = { add_solar: 'SOLAR', add_bess: 'BESS', add_gas: 'GAS', ie_estate: 'LD_NEW' };
+
+export function Dock({ client, onFly }: { client: SimClient; onFly?: (id: ComponentId) => void }) {
   const groups = [...new Set(SCENARIOS.map((s) => s.group))];
   const run = async (id: ScenarioId) => {
     const r = await client.command({ type: 'scenario', id });
     toast.value = { result: r, key: Date.now() };
+    const built = BUILDS[id];
+    if (built && r.ok) { selected.value = built; onFly?.(built); }
   };
   const ask = (id: ScenarioId, title: string) => {
     if (id === 'reset') confirmReq.value = { title: 'Reset to baseline?', body: 'The station returns to 12:00 on a normal day. Built plant and scenario changes are cleared.', action: 'Reset', run: () => void run(id) };

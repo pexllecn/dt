@@ -370,14 +370,24 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
   // --- new demand connection (data centre campus) ----------------------------------------------
   const cp = SITES.campus;
   const campusGroup = new THREE.Group();
-  const campusGeo: Geo[] = [block(cp.x1 - cp.x0, 0.2, cp.z1 - cp.z0, (cp.x0 + cp.x1) / 2, (cp.z0 + cp.z1) / 2, -0.05)];
+  const campusGeo: Geo[] = [];
   const roofGeo: Geo[] = [];
+  // The site is on a slope: each hall stands on the highest ground under it, with a plinth down to
+  // the lowest, so no part of it is buried in the hillside.
+  const span = (x0: number, z0: number, x1: number, z1: number) => {
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i <= 8; i++) for (let j = 0; j <= 8; j++) { const h = ground(x0 + ((x1 - x0) * i) / 8, z0 + ((z1 - z0) * j) / 8); lo = Math.min(lo, h); hi = Math.max(hi, h); }
+    return { lo, hi };
+  };
   for (let i = 0; i < 3; i++) {
     const x = cp.x0 + 50 + i * 80;
-    campusGeo.push(block(62, 16, 150, x, (cp.z0 + cp.z1) / 2, 0));
-    for (let k2 = 0; k2 < 10; k2++) roofGeo.push(block(5, 2.2, 10, x - 20 + (k2 % 2) * 40, cp.z0 + 30 + Math.floor(k2 / 2) * 32, 16));
+    const zc = (cp.z0 + cp.z1) / 2;
+    const g = span(x - 31, zc - 75, x + 31, zc + 75);
+    campusGeo.push(block(66, g.hi - g.lo + 1.5, 154, x, zc, g.lo - 1));
+    campusGeo.push(block(62, 16, 150, x, zc, g.hi + 0.5));
+    for (let k2 = 0; k2 < 10; k2++) roofGeo.push(block(5, 2.2, 10, x - 20 + (k2 % 2) * 40, cp.z0 + 30 + Math.floor(k2 / 2) * 32, g.hi + 16.5));
   }
-  for (let k2 = 0; k2 < 12; k2++) roofGeo.push(block(10, 3.2, 3.2, cp.x1 - 18, cp.z0 + 10 + k2 * 17, 0));
+  for (let k2 = 0; k2 < 12; k2++) { const z = cp.z0 + 10 + k2 * 17; roofGeo.push(block(10, 3.2, 3.2, cp.x1 - 18, z, ground(cp.x1 - 18, z) - 0.3)); }
   const campusMesh = new THREE.Mesh(merge(campusGeo), campusMat);
   const campusPlant = new THREE.Mesh(merge(roofGeo), m.cabinet);
   campusMesh.castShadow = campusPlant.castShadow = true;
@@ -385,7 +395,7 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
   campusGroup.add(campusMesh, campusPlant);
   group.add(campusGroup);
   pickables.push(campusMesh, campusPlant);
-  bounds.set('LD_NEW', new THREE.Box3(new THREE.Vector3(cp.x0, 0, cp.z0), new THREE.Vector3(cp.x1, 18, cp.z1)));
+  bounds.set('LD_NEW', new THREE.Box3(new THREE.Vector3(cp.x0, 0, cp.z0), new THREE.Vector3(cp.x1, 36, cp.z1)));
 
   // --- industrial park ----------------------------------------------------------------------------
   {

@@ -5,7 +5,22 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 export type Geo = THREE.BufferGeometry;
 
 /** Merge geometries, dropping attributes that do not appear on all of them. */
+/**
+ * Level of detail. A geometry may carry a low-detail stand-in in `userData.far`; it is drawn when
+ * the part is small on screen and in the shadow map. Transforms and merges carry it along.
+ */
+export const farOf = (g: Geo): Geo => (g.userData.far as Geo | undefined) ?? g;
+
+/** A transformed copy, with its low-detail stand-in transformed the same way. */
+export function transformed(g: Geo, m: THREE.Matrix4): Geo {
+  const out = g.clone().applyMatrix4(m);
+  // clone() shares userData by reference: give the copy its own.
+  out.userData = g.userData.far ? { far: (g.userData.far as Geo).clone().applyMatrix4(m) } : {};
+  return out;
+}
+
 export function merge(geos: Geo[]): Geo {
+  const fars = geos.filter(Boolean).some((g) => g.userData.far) ? geos.filter(Boolean).map(farOf) : null;
   const clean = geos.filter(Boolean).map((g) => {
     const n = g.index ? g.toNonIndexed() : g;
     for (const k of Object.keys(n.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') n.deleteAttribute(k);
@@ -14,6 +29,7 @@ export function merge(geos: Geo[]): Geo {
   });
   const m = mergeGeometries(clean, false);
   if (!m) throw new Error('merge failed');
+  m.userData = fars ? { far: merge(fars) } : {};
   return m;
 }
 
@@ -23,7 +39,7 @@ export function at(g: Geo, x: number, y: number, z: number, rx = 0, ry = 0, rz =
     new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)),
     Array.isArray(s) ? new THREE.Vector3(...s) : new THREE.Vector3(s, s, s),
   );
-  return g.clone().applyMatrix4(m);
+  return transformed(g, m);
 }
 
 export const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
@@ -84,11 +100,20 @@ export function insulator(length: number, coreR: number, shedR: number, sheds: n
   pts.push(new THREE.Vector2(coreR, length));
   pts.push(new THREE.Vector2(0, length));
   const body = new THREE.LatheGeometry(pts, seg);
+  // Low detail: a third of the facets and three profile points per shed instead of five. The
+  // silhouette and the rib rhythm are the same at the sizes it is drawn.
+  const low: THREE.Vector2[] = [new THREE.Vector2(0, 0), new THREE.Vector2(coreR, 0), new THREE.Vector2(coreR, y0)];
+  for (let i = 0; i < sheds; i++) {
+    const yb = y0 + i * pitch;
+    const R = i % 2 === 0 ? shedR : coreR + (shedR - coreR) * 0.72;
+    low.push(new THREE.Vector2(coreR, yb + pitch * 0.12), new THREE.Vector2(R, yb + pitch * 0.26), new THREE.Vector2(coreR * 1.04, yb + pitch * 0.62));
+  }
+  low.push(new THREE.Vector2(coreR, length - length * 0.05), new THREE.Vector2(coreR, length), new THREE.Vector2(0, length));
+  body.userData.far = new THREE.LatheGeometry(low, 6);
   const capH = Math.max(0.12, length * 0.05);
-  const fittings = merge([
-    post(coreR * 1.5, capH, 0, 0, -capH * 0.2, seg),
-    post(coreR * 1.5, capH, 0, 0, length - capH * 0.8, seg),
-  ]);
+  const caps = (s: number) => merge([post(coreR * 1.5, capH, 0, 0, -capH * 0.2, s), post(coreR * 1.5, capH, 0, 0, length - capH * 0.8, s)]);
+  const fittings = caps(seg);
+  fittings.userData.far = caps(6);
   return { body, fittings };
 }
 

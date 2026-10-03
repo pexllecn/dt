@@ -10,12 +10,15 @@ import {
   bladeGeometry, breakerPole, currentTransformer, cvt, disconnectorPole, dsSpan, earthArmGeometry, fanRotor,
   postInsulator, sealingEnd, surgeArrester, type MatKey, type Prototype,
 } from './equipment.ts';
-import { at, latticeBeam, latticeColumn, merge, rod, sagging, type Geo } from './geometry.ts';
+import { at, latticeBeam, latticeColumn, merge, rod, sagging, transformed, type Geo } from './geometry.ts';
 import { BAYS, BUS_SECTION, BUSBARS, TRANSFORMERS, VOLTAGE, type Bay, type Voltage } from './layout.ts';
 import type { Materials } from './materials.ts';
 import { buildTransformer, fireWall } from './transformer.ts';
 
 type Owner = ComponentId;
+
+/** Metres from a component beyond which its insulators are drawn in low detail. */
+const LOD_DISTANCE = 110;
 
 class Collector {
   private byOwner = new Map<Owner, Map<MatKey, Geo[]>>();
@@ -27,7 +30,7 @@ class Collector {
     list.push(geo);
   }
   addProto(owner: Owner, proto: Prototype, world: THREE.Matrix4): void {
-    for (const p of proto.parts) this.add(owner, p.mat, p.geo.clone().applyMatrix4(world));
+    for (const p of proto.parts) this.add(owner, p.mat, transformed(p.geo, world));
   }
   build(materials: Materials, group: THREE.Group, pickables: THREE.Object3D[], bounds: Map<Owner, THREE.Box3>): void {
     for (const [owner, mats] of this.byOwner) {
@@ -36,13 +39,30 @@ class Collector {
         const geo = merge(geos);
         geo.computeBoundingBox();
         box.union(geo.boundingBox!);
-        const mesh = new THREE.Mesh(geo, materials[mat]);
-        mesh.castShadow = mat !== 'gravel';
-        mesh.receiveShadow = true;
-        mesh.userData.owner = owner;
-        mesh.userData.matKey = mat;
-        group.add(mesh);
+        const far = geo.userData.far as Geo | undefined;
+        const make = (g: Geo) => {
+          const mesh = new THREE.Mesh(g, materials[mat]);
+          mesh.castShadow = mat !== 'gravel';
+          mesh.receiveShadow = true;
+          mesh.userData.owner = owner;
+          mesh.userData.matKey = mat;
+          return mesh;
+        };
+        const mesh = make(geo);
         pickables.push(mesh);
+        if (!far) { group.add(mesh); continue; }
+        // Insulators are the densest geometry in the yard. Beyond LOD_DISTANCE (and in the shadow
+        // map, whose camera is far away) the low-detail copy is drawn. Both are centred on the
+        // component so the distance is measured to it, not to the origin.
+        const c = geo.boundingBox!.getCenter(new THREE.Vector3());
+        const lod = new THREE.LOD();
+        lod.position.copy(c);
+        geo.translate(-c.x, -c.y, -c.z);
+        far.translate(-c.x, -c.y, -c.z);
+        lod.addLevel(mesh, 0);
+        lod.addLevel(make(far), LOD_DISTANCE);
+        lod.userData.owner = owner;
+        group.add(lod);
       }
       bounds.set(owner, box);
     }

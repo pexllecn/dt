@@ -58,9 +58,20 @@ const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
 /** Key to the Flow lens: what moves, what the colours mean, and the thermography scale. */
 export function FlowLegend() {
-  if (lens.value !== 'flow') return null;
+  // Shown in full when the Flow lens opens, then folded to a small button so it does not cover the scene.
+  const [open, setOpen] = useState(true);
+  const flow = lens.value === 'flow';
+  useEffect(() => {
+    if (!flow) return;
+    setOpen(true);
+    const t = setTimeout(() => setOpen(false), 6000);
+    return () => clearTimeout(t);
+  }, [flow]);
+  if (!flow) return null;
+  if (!open) return <button class="legend-chip panel" title="Show the Flow lens legend" aria-label="Show the Flow lens legend" onClick={() => setOpen(true)}><Icon name="layers" size={14} />Legend</button>;
   return (
     <div class="legend panel" role="note" aria-label="Flow lens legend">
+      <button class="iconbtn lg-close" title="Hide the legend" aria-label="Hide the legend" onClick={() => setOpen(false)}><Icon name="x" size={13} /></button>
       <div class="lg-title">Flow lens</div>
       <div class="lg-row">Particles move with the power flow. Speed is proportional to MW; glow shows loading.</div>
       <div class="lg-volts">

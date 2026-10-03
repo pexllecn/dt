@@ -157,7 +157,7 @@ export class Stage {
     await r.init();
     const backend = (r as unknown as { backend: { isWebGPUBackend?: boolean } }).backend;
     this.backend = backend.isWebGPUBackend ? 'WebGPU' : 'WebGL2';
-    r.setPixelRatio(Math.min(window.devicePixelRatio, this.tier === 'high' ? 2 : 1.25));
+    r.setPixelRatio(this.maxPixelRatio());
     r.toneMapping = THREE.AgXToneMapping;
     r.toneMappingExposure = 0.6;
     r.shadowMap.enabled = this.tier !== 'low';
@@ -244,7 +244,8 @@ export class Stage {
     const depth = scenePass.getTextureNode('depth');
     // Normals are reconstructed from depth, which saves a render target.
     const aoPass = ao(depth, null as unknown as THREE.Node, this.camera);
-    aoPass.resolutionScale = this.tier === 'high' ? 0.75 : 0.5;
+    // Half resolution: the occlusion is soft, so a full-resolution pass cost far more than it showed.
+    aoPass.resolutionScale = 0.5;
     aoPass.radius.value = 1.2;
     aoPass.thickness.value = 1.0;
     const occlusion = aoPass.getTextureNode().sample(screenUV).r;
@@ -388,6 +389,8 @@ export class Stage {
     const c = this.opts.canvas;
     const w = c.clientWidth || window.innerWidth;
     const h = c.clientHeight || window.innerHeight;
+    // A larger window (or full screen) lowers the ceiling: keep within the pixel budget.
+    if (!this.capture && this.renderer.getPixelRatio() > this.maxPixelRatio()) this.renderer.setPixelRatio(this.maxPixelRatio());
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
@@ -565,10 +568,24 @@ export class Stage {
     }
   }
 
+  /**
+   * The highest pixel ratio worth rendering. Retina screens offer 2, but past about 1440p worth of
+   * pixels every post-processing pass costs far more than the extra sharpness shows: on a 13 or
+   * 14 inch MacBook this renders about 1.6 instead of 2, roughly 40% fewer pixels.
+   */
+  private maxPixelRatio(): number {
+    const tierMax = this.tier === 'high' ? 2 : 1.25;
+    const c = this.opts.canvas;
+    const w = c.clientWidth || window.innerWidth;
+    const h = c.clientHeight || window.innerHeight;
+    const budget = Math.sqrt(3.7e6 / Math.max(1, w * h));
+    return Math.max(1, Math.min(window.devicePixelRatio, tierMax, budget));
+  }
+
   /** Live only: step the pixel ratio down when frames run long, and back up when there is headroom. */
   private adapt(dt: number): void {
     if (this.capture) return;
-    const max = Math.min(window.devicePixelRatio, this.tier === 'high' ? 2 : 1.25);
+    const max = this.maxPixelRatio();
     const pr = this.renderer.getPixelRatio();
     // Ignore the first seconds (shader compilation) and isolated hitches: only sustained load counts.
     if (this.time < 6 || dt >= 0.09) return;
