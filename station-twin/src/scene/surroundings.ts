@@ -483,7 +483,10 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
   // --- hedgerows and trees along the field boundaries ------------------------------------------------
   {
     const field = 140;
-    const R = 1900;
+    // Hedgerows thin out gradually with distance from the station instead of stopping at a
+    // circle: a hard edge showed as a line across high views, speckled inside and smooth outside.
+    const R = 2700;
+    const keep = (d: number) => 1 - THREE.MathUtils.smoothstep(d, 900, R);
     const shrubs: THREE.Matrix4[] = [];
     const trees: THREE.Matrix4[] = [];
     const blocked = (x: number, z: number) => CLEAR.some((r) => inRect(r, x, z, 14)) || inRect(SITES.town, x, z, 30) || inLough(x, z, 1.25);
@@ -500,8 +503,10 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
           for (let s = 0; s < field; s += 6.5) {
             const x = vertical ? gx * field : gx * field + s;
             const z = vertical ? gz * field + s : gz * field;
-            if (Math.hypot(x + 55, z) > R || blocked(x, z)) continue;
+            const d = Math.hypot(x + 55, z);
+            if (d > R || blocked(x, z)) continue;
             if (rng.next() < 0.12) continue;
+            if (rng.next() > keep(d)) continue;
             place(x + (rng.next() - 0.5) * 1.4, z + (rng.next() - 0.5) * 1.4, false);
             if (rng.next() < 0.07) place(x + (rng.next() - 0.5) * 2, z + (rng.next() - 0.5) * 2, true);
           }

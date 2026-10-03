@@ -33,6 +33,8 @@ export class WeatherFx {
   private q = new THREE.Quaternion();
   private e = new THREE.Euler();
   private sc = new THREE.Vector3();
+  private centre = new THREE.Vector3();
+  private ahead = new THREE.Vector3();
 
   constructor(private anchors: Map<ComponentId, THREE.Vector3>) {
     this.group.name = 'weather';
@@ -62,7 +64,7 @@ export class WeatherFx {
     }
   }
 
-  update(s: SimState, time: number, target: THREE.Vector3): void {
+  update(s: SimState, time: number, target: THREE.Vector3, eye?: THREE.Vector3): void {
     // New log entries: trips pulse, lightning trips strike.
     if (s.log.length < this.seenLog) this.seenLog = 0;
     for (; this.seenLog < s.log.length; this.seenLog++) {
@@ -98,7 +100,11 @@ export class WeatherFx {
     this.flash.position.copy(target).add(FLASH_OFFSET);
     if (time >= this.boltUntil) this.bolt.visible = false;
     else this.boltMat.opacity = Math.min(1, (this.boltUntil - time) / 0.2);
-    // Rain: streaks in a box around the camera target, falling and slanted with the wind.
+    // Rain: streaks in a box that travels with the camera, just ahead of it and at its height, so
+    // the rain surrounds the viewer. (A box around the ground target showed a hard edge from high
+    // views: grainy inside, smooth outside.)
+    const c = this.centre.copy(target);
+    if (eye) c.copy(eye).add(this.ahead.copy(target).sub(eye).setLength(Math.min(70, eye.distanceTo(target) * 0.5)));
     const rain = s.weather.rain;
     this.rain.visible = rain > 0.05;
     if (this.rain.visible) {
@@ -111,7 +117,7 @@ export class WeatherFx {
       for (let i = 0; i < RAIN; i++) {
         if (i >= n) { m.makeScale(0, 0, 0); this.rain.setMatrixAt(i, m); continue; }
         const y = BOX - (((this.seeds[i * 3 + 1]! * BOX + time * fall * 6) % BOX) + BOX) % BOX;
-        v.set(target.x + (this.seeds[i * 3]! - 0.5) * BOX + y * wind * 0.5, Math.max(0, y * 0.5), target.z + (this.seeds[i * 3 + 2]! - 0.5) * BOX);
+        v.set(c.x + (this.seeds[i * 3]! - 0.5) * BOX + y * wind * 0.5, Math.max(0, c.y - BOX / 2 + y), c.z + (this.seeds[i * 3 + 2]! - 0.5) * BOX);
         m.compose(v, q, sc);
         this.rain.setMatrixAt(i, m);
       }

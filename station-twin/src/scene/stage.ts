@@ -781,14 +781,15 @@ export class Stage {
       this.flow.update(this.preview ?? this.state, dt);
       this.markers.update(this.agentView, this.state.t, this.time, viewDist);
       this.markers.group.visible = this.fold.controller.p === 0;
-      this.weather.update(this.state, this.time, this.controls.getTarget(new THREE.Vector3()));
+      this.weather.update(this.state, this.time, this.controls.getTarget(new THREE.Vector3()), this.camera.position);
       this.weather.group.visible = this.fold.controller.p === 0;
       // Storm: a lower exposure and a heavier, greyer haze; lightning lifts it briefly.
       const storm = this.state.weather.storm ? 1 : 0;
       this.stormLevel = this.stormLevel < 0 ? storm : this.stormLevel + (storm - this.stormLevel) * Math.min(1, dt * 0.5);
       this.renderer.toneMappingExposure = 0.6 * (1 - 0.32 * this.stormLevel) * (1 + this.weather.flashLevel * 0.7);
       const fog = this.scene.fog as THREE.FogExp2;
-      fog.density = (this.theme === 'control' ? 0.00011 : 0.00007) * (1 + this.stormLevel * 3);
+      // The storm thickens the haze, but not so much that the landscape washes out to grey.
+      fog.density = (this.theme === 'control' ? 0.00011 : 0.00007) * (1 + this.stormLevel * 1.5);
       const wasMoving = this.fold.controller.moving;
       this.fold.update(this.state, dt);
       this.updateFold(wasMoving);
