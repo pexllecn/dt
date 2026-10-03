@@ -1,4 +1,18 @@
-import { BufferAttribute, Group, InstancedBufferAttribute, InstancedBufferGeometry, Mesh, MeshBasicNodeMaterial, PlaneGeometry } from 'three/webgpu';
+import {
+  BufferAttribute,
+  DataTexture,
+  Group,
+  InstancedBufferAttribute,
+  InstancedBufferGeometry,
+  LinearFilter,
+  LinearMipmapLinearFilter,
+  Mesh,
+  MeshBasicNodeMaterial,
+  PlaneGeometry,
+  RedFormat,
+  RepeatWrapping,
+  UnsignedByteType,
+} from 'three/webgpu';
 import {
   Fn,
   abs,
@@ -10,7 +24,7 @@ import {
   length,
   varyingProperty,
   mix,
-  mx_fractal_noise_float,
+  texture,
   positionWorld,
   sin,
   smoothstep,
@@ -76,15 +90,18 @@ export class Weather {
     mat.depthWrite = false;
     mat.fog = true;
     const drift = vec2(weather.windTo.x, weather.windTo.y).mul(weather.windMs.mul(world.time).mul(40));
-    const p = positionWorld.xz.sub(drift).div(90_000);
-    const n = mx_fractal_noise_float(vec3(p, world.time.mul(0.004)), 4, 2.1, 0.5).mul(0.5).add(0.5);
-    const detail = mx_fractal_noise_float(vec3(p.mul(4.3), 1.7), 2).mul(0.12);
     const cover = weather.cloud;
-    const density = smoothstep(float(1).sub(cover).sub(0.05), float(1).sub(cover).add(0.3), n.add(detail));
+    const p = positionWorld.xz.sub(drift).div(420_000);
+    // Two samples of a tileable noise texture (made once at start-up) instead of per-pixel noise.
+    const tex = cloudTexture();
+    const n = texture(tex, p).r.mul(0.7).add(texture(tex, p.mul(3.1).add(vec2(0.37, 0.61))).r.mul(0.3));
+    const density = smoothstep(float(1).sub(cover).sub(0.05), float(1).sub(cover).add(0.3), n);
     // Clouds thin out as the camera comes down through them, so close views stay clear.
     const height = float(2_600).mul(world.exaggeration);
     const viewFade = smoothstep(height.mul(2.5), height.mul(8), world.altitude);
-    const colour = mix(vec3(0.97, 0.965, 0.95), vec3(0.17, 0.2, 0.24), world.themeMix);
+    // Fair-weather cloud is white; storm cloud darkens to slate.
+    const fair = mix(vec3(0.97, 0.965, 0.95), vec3(0.6, 0.64, 0.68), smoothstep(0.6, 0.78, cover));
+    const colour = mix(fair, vec3(0.17, 0.2, 0.24), world.themeMix);
     const shade = mix(float(0.78), float(1), smoothstep(0.3, 0.9, density));
     mat.colorNode = vec4(colour.mul(shade), 1);
     mat.opacityNode = density.mul(mix(float(0.42), float(0.32), world.themeMix)).mul(viewFade).mul(cover.mul(0.6).add(0.4));
@@ -189,7 +206,7 @@ export function weatherFor(scenario: string, hours: number, front?: { arrivalHou
     const t = Math.max(0, Math.min(1, (hours - (a - 2)) / 3));
     const after = Math.max(0, Math.min(1, (hours - (a + 6)) / 3));
     const rain = Math.max(0, Math.min(1, (hours - (a - 0.5)) / 1.5)) * (1 - after * 0.8);
-    return { cloud: 0.55 + 0.4 * t - 0.25 * after, rain, windFromDeg: 225 + 65 * after, ms: 9 + 9 * t - 4 * after };
+    return { cloud: 0.5 + 0.25 * t - 0.2 * after, rain, windFromDeg: 225 + 65 * after, ms: 9 + 9 * t - 4 * after };
   }
   if (scenario === 'y2034') return { cloud: 0.55, rain: 0, windFromDeg: 250, ms: 7 };
   return { cloud: 0.42, rain: 0, windFromDeg: 245, ms: 8 };
@@ -197,3 +214,54 @@ export function weatherFor(scenario: string, hours: number, front?: { arrivalHou
 
 // Rehearsal and test hook (read-only by convention).
 Object.assign(globalThis as unknown as Record<string, unknown>, { __twinWeather: weather });
+
+let cloudTex: DataTexture | null = null;
+
+/** Tileable fractal value noise (256 x 256), built once on the CPU. */
+function cloudTexture(): DataTexture {
+  if (cloudTex) return cloudTex;
+  const N = 256;
+  const data = new Uint8Array(N * N);
+  // Seeded lattice so the sky is the same on every run.
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const octave = (cells: number) => {
+    const lat = Float32Array.from({ length: cells * cells }, rnd);
+    const at = (x: number, y: number) => lat[((y % cells) + cells) % cells * cells + (((x % cells) + cells) % cells)]!;
+    return (u: number, v: number) => {
+      const x = u * cells;
+      const y = v * cells;
+      const x0 = Math.floor(x);
+      const y0 = Math.floor(y);
+      const fx = x - x0;
+      const fy = y - y0;
+      const sx = fx * fx * (3 - 2 * fx);
+      const sy = fy * fy * (3 - 2 * fy);
+      const a = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * sx;
+      const b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * sx;
+      return a + (b - a) * sy;
+    };
+  };
+  const octaves = [octave(4), octave(8), octave(16), octave(32), octave(64)];
+  const weights = [0.5, 0.25, 0.13, 0.08, 0.04];
+  const raw = new Float32Array(N * N);
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      let v = 0;
+      for (let o = 0; o < octaves.length; o++) v += octaves[o]!(x / N, y / N) * weights[o]!;
+      raw[y * N + x] = v;
+      lo = Math.min(lo, v);
+      hi = Math.max(hi, v);
+    }
+  // Stretch to the full range: summed octaves crowd around the middle.
+  for (let i = 0; i < raw.length; i++) data[i] = Math.round(((raw[i]! - lo) / (hi - lo)) * 255);
+  cloudTex = new DataTexture(data, N, N, RedFormat, UnsignedByteType);
+  cloudTex.wrapS = cloudTex.wrapT = RepeatWrapping;
+  cloudTex.magFilter = LinearFilter;
+  cloudTex.minFilter = LinearMipmapLinearFilter;
+  cloudTex.generateMipmaps = true;
+  cloudTex.needsUpdate = true;
+  return cloudTex;
+}

@@ -3,6 +3,7 @@ import { useWorld } from '@/app/store';
 import { useSim } from '@/sim/client';
 import type { Recommendation } from '@/agents/engine';
 import { fmtHour, useUi } from './uiStore';
+import { SourceTag } from './SourceTag';
 
 function inputsHash(obj: unknown): string {
   const s = JSON.stringify(obj);
@@ -75,7 +76,9 @@ export function Recommendations() {
     >
       <div className="flex items-baseline justify-between">
         <p className="text-[10px] uppercase tracking-[0.18em] text-crimson">Recommendation · awaiting decision</p>
-        <p className="figure text-[11px] text-ink-soft">{fmtHour(rec.step / 4)}</p>
+        <p className="figure text-[11px] text-ink-soft">
+          {fmtHour(rec.step / 4)} <SourceTag s="Synthetic" />
+        </p>
       </div>
       <h3 className="caption mt-1.5 text-[21px] leading-tight text-ink">{rec.title}</h3>
       <p className="mt-1.5 text-[12px] leading-snug text-ink-soft">{rec.summary}</p>

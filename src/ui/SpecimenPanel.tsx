@@ -2,6 +2,7 @@ import { useWorld } from '@/app/store';
 import { useSim } from '@/sim/client';
 import { scenarios, type ScenarioId } from '@/sim/scenarios';
 import { fmtHour, useUi } from './uiStore';
+import { SourceTag } from './SourceTag';
 import { useDirector } from '@/director/store';
 
 const swatch: Record<ScenarioId, string> = { today: '#c9c3b5', hero: '#a8231b', storm: '#4f5d6b', y2034: '#a86a12' };
@@ -70,7 +71,9 @@ export function SpecimenPanel() {
       style={{ background: 'var(--panel)' }}
       aria-label="Scenario and inputs"
     >
-      <p className="text-[10px] uppercase tracking-[0.18em] text-ink-soft">Scenario</p>
+      <p className="flex justify-between text-[10px] uppercase tracking-[0.18em] text-ink-soft">
+        Scenario <SourceTag s="Assumption" />
+      </p>
       <div className="mt-2 grid grid-cols-4 gap-2">
         {(Object.keys(scenarios) as ScenarioId[]).map((id, i) => (
           <button
