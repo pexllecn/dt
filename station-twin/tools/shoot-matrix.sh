@@ -28,3 +28,4 @@ for k in $(printf '%s\n' "${!S[@]}" | sort); do
 done
 wait
 ls $O | wc -l
+node tools/jpeg.mjs "$O/../matrix-jpg" $O/*.png  # the repository keeps the JPEG versions

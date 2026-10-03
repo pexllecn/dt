@@ -249,6 +249,39 @@ async function boot(): Promise<void> {
   }
   stage.start();
   document.body.dataset.ready = '1';
+  if (params.has('bench')) void bench(stage);
 }
 
 void boot();
+
+/** ?bench=1: a two-minute route through the heaviest views; prints a summary to paste back. */
+async function bench(stage: Stage): Promise<void> {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const route: { name: string; run: () => void; seconds: number }[] = [
+    { name: 'Overview', run: () => { lens.value = 'physical'; stage.overview(false); }, seconds: 15 },
+    { name: 'Yard close-up', run: () => stage.view([-87, 4, -28], [-60, 18, -50], false), seconds: 15 },
+    { name: 'Network zoom', run: () => stage.view([300, 0, -600], [-1800, 3400, 4200], false), seconds: 20 },
+    { name: 'Flow lens, network', run: () => { lens.value = 'flow'; }, seconds: 20 },
+    { name: 'Flow lens, yard', run: () => stage.view([-150, 6, -30], [-330, 95, -170], false), seconds: 15 },
+    { name: 'Circuit lens', run: () => { lens.value = 'circuit'; }, seconds: 15 },
+    { name: 'Back to Physical', run: () => { lens.value = 'physical'; }, seconds: 20 },
+  ];
+  const rows: string[] = [];
+  for (const seg of route) {
+    seg.run();
+    await wait(1500);
+    stage.takeFrameTimes();
+    await wait(seg.seconds * 1000);
+    const t = stage.takeFrameTimes().sort((a, b) => a - b);
+    const avg = t.reduce((a, b) => a + b, 0) / Math.max(1, t.length);
+    const p95 = t[Math.floor(t.length * 0.95)] ?? 0;
+    rows.push(`${seg.name.padEnd(20)} ${(1000 / avg).toFixed(0).padStart(4)} fps  p95 ${p95.toFixed(1).padStart(6)} ms`);
+  }
+  const st = stage.getStats();
+  const text = [`Cognitive Grid Twin bench, ${st.backend}, tier ${st.tier}, ${innerWidth}x${innerHeight} at ${devicePixelRatio}x`, navigator.userAgent, ...rows].join('\n');
+  console.log(text);
+  const pre = document.createElement('pre');
+  pre.className = 'bench panel';
+  pre.textContent = text;
+  document.querySelector('.ui')!.appendChild(pre);
+}

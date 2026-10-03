@@ -82,6 +82,11 @@ export class Stage {
   fold!: FoldLayer;
   markers!: Markers;
   weather!: WeatherFx;
+  private stormLevel = -1;
+  private slowFor = 0;
+  private fastFor = 0;
+  /** Frame times (ms) since the last call to takeFrameTimes, for the bench. */
+  private frameTimes: number[] = [];
   agentView: AgentView | null = null;
   /** A predicted state to show as a ghost (hovering a recommendation option). */
   preview: SimState | null = null;
@@ -544,6 +549,23 @@ export class Stage {
     }
   }
 
+  /** Live only: step the pixel ratio down when frames run long, and back up when there is headroom. */
+  private adapt(dt: number): void {
+    if (this.capture) return;
+    const max = Math.min(window.devicePixelRatio, this.tier === 'high' ? 2 : 1.25);
+    const pr = this.renderer.getPixelRatio();
+    if (dt > 1 / 40) { this.slowFor += dt; this.fastFor = 0; } else if (dt < 1 / 70) { this.fastFor += dt; this.slowFor = 0; } else { this.slowFor = 0; this.fastFor = 0; }
+    if (this.slowFor > 3 && pr > 0.75) { this.renderer.setPixelRatio(Math.max(0.75, pr - 0.25)); this.slowFor = 0; this.resize(); }
+    if (this.fastFor > 6 && pr < max) { this.renderer.setPixelRatio(Math.min(max, pr + 0.25)); this.fastFor = 0; this.resize(); }
+  }
+
+  /** Frame times recorded since the last call (bench). */
+  takeFrameTimes(): number[] {
+    const out = this.frameTimes;
+    this.frameTimes = [];
+    return out;
+  }
+
   getStats(): StageStats {
     return { ...this.stats, tier: this.tier };
   }
@@ -609,7 +631,12 @@ export class Stage {
       this.markers.group.visible = this.fold.controller.p === 0;
       this.weather.update(this.state, this.time, this.controls.getTarget(new THREE.Vector3()));
       this.weather.group.visible = this.fold.controller.p === 0;
-      this.renderer.toneMappingExposure = 0.6 * (1 + this.weather.flashLevel * 1.8);
+      // Storm: a lower exposure and a heavier, greyer haze; lightning lifts it briefly.
+      const storm = this.state.weather.storm ? 1 : 0;
+      this.stormLevel = this.stormLevel < 0 ? storm : this.stormLevel + (storm - this.stormLevel) * Math.min(1, dt * 0.5);
+      this.renderer.toneMappingExposure = 0.6 * (1 - 0.32 * this.stormLevel) * (1 + this.weather.flashLevel * 0.7);
+      const fog = this.scene.fog as THREE.FogExp2;
+      fog.density = (this.theme === 'control' ? 0.00011 : 0.00007) * (1 + this.stormLevel * 3);
       const wasMoving = this.fold.controller.moving;
       this.fold.update(this.state, dt);
       this.updateFold(wasMoving);
@@ -630,6 +657,7 @@ export class Stage {
     this.frames++;
     this.fpsAccum += dt;
     this.stats.frameMs = this.stats.frameMs * 0.9 + (performance.now() - t0) * 0.1;
+    if (!fixed) { this.frameTimes.push(dt * 1000); this.adapt(dt); }
     if (this.fpsAccum >= 0.5) {
       this.stats.fps = this.frames / this.fpsAccum;
       this.frames = 0;

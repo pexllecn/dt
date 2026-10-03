@@ -8,7 +8,7 @@ import * as THREE from 'three/webgpu';
 import type { ComponentId, SimState } from '../sim/types.ts';
 
 const RAIN = 2600;
-const BOX = 260;
+const BOX = 180;
 
 function hash(n: number): number { const s = Math.sin(n * 127.1) * 43758.5453; return s - Math.floor(s); }
 
@@ -29,8 +29,8 @@ export class WeatherFx {
 
   constructor(private anchors: Map<ComponentId, THREE.Vector3>) {
     this.group.name = 'weather';
-    const streak = new THREE.CylinderGeometry(0.012, 0.012, 1.4, 3, 1, true);
-    this.rainMat = new THREE.MeshBasicNodeMaterial({ color: 0xc9d4de, transparent: true, opacity: 0.35, depthWrite: false });
+    const streak = new THREE.CylinderGeometry(0.035, 0.035, 3.2, 3, 1, true);
+    this.rainMat = new THREE.MeshBasicNodeMaterial({ color: 0xd6dee6, transparent: true, opacity: 0.45, depthWrite: false });
     this.rain = new THREE.InstancedMesh(streak, this.rainMat, RAIN);
     this.rain.frustumCulled = false;
     this.rain.visible = false;
@@ -42,7 +42,7 @@ export class WeatherFx {
     this.bolt.visible = false;
     this.bolt.frustumCulled = false;
     this.group.add(this.bolt);
-    this.flash = new THREE.PointLight(0xdfe8ff, 0, 0, 1.2);
+    this.flash = new THREE.PointLight(0xdfe8ff, 0, 0, 2);
     this.group.add(this.flash);
     const ringGeo = new THREE.RingGeometry(0.9, 1, 64);
     ringGeo.rotateX(-Math.PI / 2);
@@ -87,7 +87,7 @@ export class WeatherFx {
     }
     if (time < this.boltUntil) flash = Math.max(flash, (this.boltUntil - time) / 0.35);
     this.flashLevel = flash;
-    this.flash.intensity = flash * 6e6;
+    this.flash.intensity = flash * 1.2e6;
     this.flash.position.copy(target).add(new THREE.Vector3(-200, 400, -150));
     if (time >= this.boltUntil) this.bolt.visible = false;
     else this.boltMat.opacity = Math.min(1, (this.boltUntil - time) / 0.2);
@@ -110,7 +110,7 @@ export class WeatherFx {
         this.rain.setMatrixAt(i, m);
       }
       this.rain.instanceMatrix.needsUpdate = true;
-      this.rainMat.opacity = 0.18 + rain * 0.25;
+      this.rainMat.opacity = 0.3 + rain * 0.35;
     }
   }
 
