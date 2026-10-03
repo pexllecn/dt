@@ -337,6 +337,44 @@ export class Stage {
     this.flowDim.value = on ? 1 : 0;
   }
 
+  /**
+   * Compile every GPU program the first minutes will need, while the loading screen is up.
+   * Each kind of surface needs a program compiled the first time it is drawn, which on a Mac
+   * takes from tens of milliseconds to seconds; done lazily, that was the stutter of a first
+   * run. The variants compiled here: the normal view, the Flow lens glass, the fold dissolve,
+   * and night lighting (floodlights change every lit material's program). One real frame of each
+   * also compiles the shadow and post-processing passes. The browser keeps compiled programs on
+   * disk, so later visits start faster still.
+   */
+  async warmUp(onStep?: (label: string) => void): Promise<void> {
+    if (!this.state) return;
+    const r = this.renderer;
+    // Compile in parallel, then draw once directly (a full frame would reset the floodlights to
+    // the time of day before the night variant is drawn).
+    const draw = async () => {
+      await r.compileAsync(this.scene, this.camera);
+      if (this.pipeline) this.pipeline.render();
+      else r.render(this.scene, this.camera);
+    };
+    this.frame(1 / 60);
+    onStep?.('Preparing the station');
+    await draw();
+    onStep?.('Preparing the Flow lens');
+    this.lens = 'flow'; this.applyLens();
+    await draw();
+    this.lens = 'physical'; this.applyLens();
+    onStep?.('Preparing the circuit view');
+    for (const m of this.fadeMats) { m.alphaHash = true; m.needsUpdate = true; }
+    await draw();
+    for (const m of this.fadeMats) { m.alphaHash = false; m.needsUpdate = true; }
+    onStep?.('Preparing night lighting');
+    const floods = this.sky.floods.map((f) => f.visible);
+    for (const f of this.sky.floods) f.visible = true;
+    await draw();
+    this.sky.floods.forEach((f, i) => (f.visible = floods[i]!));
+    await draw();
+  }
+
   /** Fold progress, 0 (Physical) to 1 (Circuit). */
   foldP(): number { return this.fold.controller.p; }
 

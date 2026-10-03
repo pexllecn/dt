@@ -230,6 +230,17 @@ async function boot(): Promise<void> {
   const pv = params.get('preview');
   if (pv) { const r = agents.value?.recommendations.find((x) => x.status === 'pending'); const o = r?.options[Number(pv) - 1]; if (r && o) hovered.value = { recId: r.id, optionId: o.id }; }
 
+  // Live: compile the GPU programs behind the loading screen, once the first state has arrived.
+  if (!capture) {
+    const label = loading.querySelector('div');
+    const t0 = performance.now();
+    while (!snap.value && performance.now() - t0 < 5000) await new Promise((r) => setTimeout(r, 30));
+    try {
+      await stage.warmUp((text) => { if (label?.firstChild) label.firstChild.textContent = text; });
+    } catch (e) {
+      console.warn('Warm-up skipped', e);
+    }
+  }
   loading.classList.add('done');
   setTimeout(() => loading.remove(), 500);
   if (capture) {
