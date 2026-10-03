@@ -37,7 +37,7 @@ All eight milestones are complete: the simulation, the station in 3D, the surrou
 
 ## Presenting
 
-Open `dist/index.html` (no server needed). Press Right, or click Tour, to start the guided demo; Right advances and approves at decision points, Left goes back. 1, 2 and 3 switch lens, Ctrl or Cmd+K opens the palette, A the agent feed, T the theme, M the method and assumptions. `?bench=1` runs a two-minute performance route and prints a summary.
+Open `dist/index.html` (no server needed). Press Right, or click Tour, to start the guided demo; Right advances and approves at decision points, Left goes back. 1, 2 and 3 switch lens, Ctrl or Cmd+K opens the palette, A the agent feed, T the theme, M the method and assumptions. F, or the button at the right of the top strip, toggles full screen. Building plant from the scenario panel (solar farm, battery, gas peaker, new demand connection) flies the camera to it. In the Flow lens the legend folds to a Legend button after a few seconds. `?bench=1` runs a two-minute performance route and prints a summary.
 
 Milestone 3 (station in 3D) report: [docs/milestones/M3.md](docs/milestones/M3.md). Milestone 4 (surroundings and the Flow lens) report: [docs/milestones/M4.md](docs/milestones/M4.md). Milestone 5 (Circuit lens and the fold): [docs/milestones/M5.md](docs/milestones/M5.md). Milestone 6 (agents): [docs/milestones/M6.md](docs/milestones/M6.md). Milestone 7 (presenter mode and the guided tour): [docs/milestones/M7.md](docs/milestones/M7.md). Milestone 8 (polish and verification): [docs/milestones/M8.md](docs/milestones/M8.md).
 
