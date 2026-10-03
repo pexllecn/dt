@@ -33,7 +33,7 @@ function App({ client, stage }: { client: SimClient; stage: Stage }) {
   return (
     <>
       <TopStrip client={client} />
-      <Dock client={client} />
+      <Dock client={client} onFly={(id) => stage.flyTo(id)} />
       <DockToggle />
       <Inspector client={client} onFrame={(id) => stage.flyTo(id, true)} />
       <Toast />

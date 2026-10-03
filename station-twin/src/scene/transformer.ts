@@ -1,6 +1,6 @@
 /** Power transformer model: tank, radiators with fans, conservator, bushings, plinth and bund. */
 import * as THREE from 'three/webgpu';
-import { at, block, box, cyl, insulator, merge, post, rod, type Geo } from './geometry.ts';
+import { at, block, box, cyl, insulator, merge, post, rod, transformed, type Geo } from './geometry.ts';
 import type { TransformerPlacement, Voltage } from './layout.ts';
 import type { MatKey } from './equipment.ts';
 
@@ -110,8 +110,8 @@ export function buildTransformer(t: TransformerPlacement): TransformerModel {
       add('tankPaint', at(cyl(0.32, 0.5, 16), xs, y0 + 0.25, zs));
       const i = insulator(len, r, r * 1.85, Math.round(len * 5));
       const m = new THREE.Matrix4().compose(new THREE.Vector3(xs, y0 + 0.5, zs), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -tilt)), new THREE.Vector3(1, 1, 1));
-      add('porcelain', i.body.clone().applyMatrix4(m));
-      add('galvanised', i.fittings.clone().applyMatrix4(m));
+      add('porcelain', transformed(i.body, m));
+      add('galvanised', transformed(i.fittings, m));
       const tip = new THREE.Vector3(0, len + 0.15, 0).applyMatrix4(m);
       add('aluminium', at(cyl(0.12, 0.3, 12), tip.x, tip.y, tip.z));
       out.push(new THREE.Vector3(t.x + tip.x, tip.y + 0.15, t.z + tip.z));
