@@ -60,6 +60,8 @@ export interface StageStats {
   triangles: number;
   backend: string;
   tier: Tier;
+  /** Step on the adaptive quality ladder (0 is full quality). */
+  quality?: number;
 }
 
 export interface ProjectedLabel {
@@ -83,12 +85,18 @@ export class Stage {
   markers!: Markers;
   weather!: WeatherFx;
   private stormLevel = -1;
-  private slowFor = 0;
-  private fastFor = 0;
+  /** Quality ladder state (see adapt). */
+  private window: number[] = [];
+  private windowStart = 0;
+  private lastWall = 0;
+  private wallStart = 0;
+  private level = 0;
+  private fastWindows = 0;
+  private backoff: number[] = [];
+  private bannedUntil: number[] = [];
+  private aoOn = true;
+  private baseShadow = 4096;
   /** A pixel ratio that proved too slow is not retried until this time (seconds of stage time). */
-  private prCeiling = Infinity;
-  private prRetryAt = 0;
-  private prBackoff = 30;
   /** Shadows are redrawn only when what they show can have changed (see updateShadows). */
   private shadowFit = new THREE.Vector4(NaN, 0, 0, 0);
   private shadowSun = new THREE.Vector3();
@@ -176,6 +184,7 @@ export class Stage {
     const focus = new THREE.Vector3(...YARD_CENTRE);
     this.sky = createSky(this.scene, this.materials, focus);
     if (this.tier === 'medium') this.sky.sun.shadow.mapSize.set(2048, 2048);
+    this.baseShadow = this.sky.sun.shadow.mapSize.x;
     const yard = buildYard(this.materials);
     this.scene.add(yard.group);
     this.station = buildStation(this.materials);
@@ -242,6 +251,7 @@ export class Stage {
   }
 
   private buildPipeline(): void {
+    (this.pipeline as unknown as { dispose?: () => void } | null)?.dispose?.();
     if (this.tier === 'low') { this.pipeline = null; return; }
     const pipeline = new THREE.RenderPipeline(this.renderer);
     const scenePass = pass(this.scene, this.camera);
@@ -252,14 +262,17 @@ export class Stage {
     scenePass.setMRT(useTraa ? mrt({ output, emissive, velocity }) : mrt({ output, emissive }));
     const colour = scenePass.getTextureNode('output');
     const depth = scenePass.getTextureNode('depth');
-    // Normals are reconstructed from depth, which saves a render target.
-    const aoPass = ao(depth, null as unknown as THREE.Node, this.camera);
-    // Half resolution: the occlusion is soft, so a full-resolution pass cost far more than it showed.
-    aoPass.resolutionScale = 0.5;
-    aoPass.radius.value = 1.2;
-    aoPass.thickness.value = 1.0;
-    const occlusion = aoPass.getTextureNode().sample(screenUV).r;
-    const lit = colour.rgb.mul(mix(float(1), occlusion, this.aoStrength));
+    let lit = colour.rgb;
+    if (this.aoOn) {
+      // Normals are reconstructed from depth, which saves a render target.
+      const aoPass = ao(depth, null as unknown as THREE.Node, this.camera);
+      // Half resolution: the occlusion is soft, so a full-resolution pass cost far more than it showed.
+      aoPass.resolutionScale = 0.5;
+      aoPass.radius.value = 1.2;
+      aoPass.thickness.value = 1.0;
+      const occlusion = aoPass.getTextureNode().sample(screenUV).r;
+      lit = colour.rgb.mul(mix(float(1), occlusion, this.aoStrength));
+    }
     const glow = bloom(scenePass.getTextureNode('emissive'), 0.9, 0.35, 0.05);
     // Flow lens: the scene dims so the glowing conductors and particles carry the picture.
     const emis = scenePass.getTextureNode('emissive').rgb;
@@ -316,7 +329,11 @@ export class Stage {
     // The Flow lens waits until the station has unfolded. A preview borrows it.
     const on = (this.lens === 'flow' || this.preview !== null) && this.fold.controller.p === 0;
     this.flow.setActive(false, [], false);
-    if (on) this.flow.setActive(true, [this.station.group, this.surroundings.group], this.theme === 'control');
+    // Glass for the yard and for the line towers and spans (steel the flow is seen through). Plant
+    // outside the fence (gas, battery, campus, industry, town, solar, wind) stays solid, so it is
+    // still there to find in the Flow lens.
+    const steel = this.surroundings.group.children.filter((o) => o.userData.structure || o.userData.flowConductor);
+    if (on) this.flow.setActive(true, [this.station.group, ...steel], this.theme === 'control');
     this.flowDim.value = on ? 1 : 0;
   }
 
@@ -603,24 +620,62 @@ export class Stage {
     return Math.max(1, Math.min(window.devicePixelRatio, tierMax, budget));
   }
 
-  /** Live only: step the pixel ratio down when frames run long, and back up when there is headroom. */
-  private adapt(dt: number): void {
-    if (this.capture) return;
+  /**
+   * Live only: a quality ladder driven by the median frame time over two-second windows.
+   * Each step down gives up the least visible quality first: pixel ratio down to 1, then the
+   * ambient occlusion pass, then a 2048 shadow map, then a pixel ratio below 1. It steps back up
+   * after six seconds of headroom; a level that proved too slow is not retried for a while, and
+   * the wait doubles each time, so it never oscillates.
+   */
+  private ladder(): { pr: number; ao: boolean; shadow: number }[] {
     const max = this.maxPixelRatio();
-    const pr = this.renderer.getPixelRatio();
-    // Ignore the first seconds (shader compilation) and isolated hitches: only sustained load counts.
-    if (this.time < 6 || dt >= 0.09) return;
-    if (dt > 1 / 40) { this.slowFor += dt; this.fastFor = 0; } else if (dt < 1 / 50) { this.fastFor += dt; this.slowFor = 0; } else { this.slowFor = 0; this.fastFor = 0; }
-    if (this.slowFor > 3 && pr > 0.75) {
-      // Remember the ratio that was too slow, so the stage does not oscillate between two
-      // ratios, reallocating every render target each time. Each repeat waits longer.
-      if (this.time < this.prRetryAt + 10) this.prBackoff = Math.min(600, this.prBackoff * 2);
-      this.prCeiling = pr;
-      this.prRetryAt = this.time + this.prBackoff;
-      this.renderer.setPixelRatio(Math.max(0.75, pr - 0.25)); this.slowFor = 0; this.resize();
-    }
-    const next = Math.min(max, pr + 0.25);
-    if (this.fastFor > 6 && pr < max && (next < this.prCeiling || this.time > this.prRetryAt)) { this.renderer.setPixelRatio(next); this.fastFor = 0; this.resize(); }
+    const base = this.baseShadow;
+    const out: { pr: number; ao: boolean; shadow: number }[] = [];
+    for (let pr = max; pr > 1.001; pr -= 0.25) out.push({ pr, ao: true, shadow: base });
+    out.push({ pr: 1, ao: true, shadow: base }, { pr: 1, ao: false, shadow: base }, { pr: 1, ao: false, shadow: Math.min(base, 2048) });
+    out.push({ pr: 0.85, ao: false, shadow: Math.min(base, 2048) }, { pr: 0.75, ao: false, shadow: Math.min(base, 2048) });
+    return out;
+  }
+
+  private adapt(): void {
+    // Real wall-clock time: the simulation step is clamped, which would stretch the windows.
+    const now = performance.now() / 1000;
+    const dt = this.lastWall ? now - this.lastWall : 0;
+    this.lastWall = now;
+    if (this.capture || !dt) return;
+    if (!this.wallStart) this.wallStart = now;
+    if (now - this.wallStart < 6) return;
+    this.window.push(dt);
+    if (now - this.windowStart < 2) return;
+    const sorted = this.window.sort((a, b) => a - b);
+    const median = sorted[sorted.length >> 1] ?? dt;
+    this.window = [];
+    this.windowStart = now;
+    const ladder = this.ladder();
+    const level = Math.min(this.level, ladder.length - 1);
+    if (median > 1 / 36 && level < ladder.length - 1) {
+      // This level is too slow: do not come back to it for a while.
+      this.backoff[level] = Math.min(600, (this.backoff[level] ?? 15) * 2);
+      this.bannedUntil[level] = now + this.backoff[level]!;
+      this.fastWindows = 0;
+      this.applyLevel(level + 1);
+    } else if (median < 1 / 55) {
+      if (++this.fastWindows >= 3 && level > 0 && now > (this.bannedUntil[level - 1] ?? 0)) {
+        this.fastWindows = 0;
+        this.applyLevel(level - 1);
+      }
+    } else this.fastWindows = 0;
+  }
+
+  private applyLevel(level: number): void {
+    const ladder = this.ladder();
+    this.level = Math.max(0, Math.min(level, ladder.length - 1));
+    const q = ladder[this.level]!;
+    if (Math.abs(this.renderer.getPixelRatio() - q.pr) > 0.01) { this.renderer.setPixelRatio(q.pr); this.resize(); }
+    if (q.ao !== this.aoOn) { this.aoOn = q.ao; this.buildPipeline(); }
+    const shadow = this.sky.sun.shadow;
+    if (shadow.mapSize.x !== q.shadow) { shadow.mapSize.set(q.shadow, q.shadow); shadow.needsUpdate = true; }
+    this.stats.quality = this.level;
   }
 
   /** Frame times recorded since the last call (bench). */
@@ -761,7 +816,7 @@ export class Stage {
     this.frames++;
     this.fpsAccum += dt;
     this.stats.frameMs = this.stats.frameMs * 0.9 + (performance.now() - t0) * 0.1;
-    if (!fixed) { this.frameTimes.push(dt * 1000); this.adapt(dt); }
+    if (!fixed) { this.frameTimes.push(dt * 1000); this.adapt(); }
     if (this.fpsAccum >= 0.5) {
       this.stats.fps = this.frames / this.fpsAccum;
       this.frames = 0;
