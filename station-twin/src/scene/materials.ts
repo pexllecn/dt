@@ -1,12 +1,15 @@
 /**
- * Physically based, fully procedural materials (no texture files). Surface detail comes from
- * noise evaluated on world position, so it holds up at close range without tiling.
+ * Physically based, procedural materials (no texture files). Surface detail on small parts comes
+ * from noise evaluated on world position. The large surfaces (fields, gravel, roads, hedges,
+ * water) sample a tileable noise texture generated at start-up instead: it is several times
+ * cheaper per pixel, and mipmapped, so fine detail fades out cleanly with distance.
  */
 import * as THREE from 'three/webgpu';
 import {
   abs, bumpMap, clamp, color, float, floor, fract, max, mix, mx_cell_noise_float, mx_fractal_noise_float,
-  mx_noise_float, normalLocal, positionLocal, positionWorld, smoothstep, step, uniform, vec2, vec3,
+  mx_noise_float, normalLocal, positionLocal, positionWorld, smoothstep, step, texture, uniform, vec2, vec3,
 } from 'three/tsl';
+import { createNoiseTexture } from './noiseTexture.ts';
 
 export interface Materials {
   galvanised: THREE.MeshStandardNodeMaterial;
@@ -39,9 +42,15 @@ const n3 = (scale: number, octaves = 3) => mx_fractal_noise_float(positionWorld.
 
 export function createMaterials(): Materials {
   const night = uniform(0) as unknown as THREE.UniformNode<'float', number>;
+  const noise = createNoiseTexture();
+  /** Sample the noise texture at a ground position; `size` is the tile size in metres. */
+  const tex = (xz: THREE.Node<'vec2'>, size: number) => texture(noise, xz.div(size));
+  const ground = positionWorld.xz as unknown as THREE.Node<'vec2'>;
+  /** The same position turned by about 37 degrees, so two scales of the tile never line up. */
+  const turned = vec2(positionWorld.x.mul(0.8).sub(positionWorld.z.mul(0.6)), positionWorld.x.mul(0.6).add(positionWorld.z.mul(0.8))) as unknown as THREE.Node<'vec2'>;
   // Peat-dark lough water: mostly reflection of the sky, with a slow ripple in the normals.
   const water = new THREE.MeshStandardNodeMaterial({ roughness: 0.08, metalness: 0.0 });
-  water.colorNode = mix(color(0x16232a), color(0x24353b), mx_fractal_noise_float(positionWorld.mul(0.012), 2, 2.0, 0.5).mul(0.5).add(0.5));
+  water.colorNode = mix(color(0x16232a), color(0x24353b), tex(ground, 160).r);
 
   const galvanised = new THREE.MeshStandardNodeMaterial({ metalness: 0.85 });
   {
@@ -86,20 +95,25 @@ export function createMaterials(): Materials {
     concrete.roughnessNode = float(0.9).sub(fine.mul(0.05));
   }
 
-  // Gravel: stones resolved with cellular noise, so the yard reads as stone at close range.
+  // Gravel: crushed limestone chippings. Each chip is a cell of the texture, with its own tone and
+  // darker gaps between chips; two turned scales hide the tiling, broad patches add wear.
   const gravel = new THREE.MeshStandardNodeMaterial({ metalness: 0 });
   {
-    const p = positionWorld.xz;
-    const stones = mx_cell_noise_float(vec3(p.x, p.y, 0).mul(14.0));
-    const pebble = mx_fractal_noise_float(vec3(p.x, p.y, 0).mul(22.0), 2, 2.0, 0.5);
-    const broad = mx_fractal_noise_float(vec3(p.x, p.y, 0).mul(0.05), 3, 2.0, 0.5);
-    gravel.colorNode = mix(color(0x55524d), color(0x8f8a80), clamp(stones.mul(0.7).add(pebble.mul(0.3)).add(broad.mul(0.15)), 0, 1));
-    gravel.roughnessNode = float(0.93);
-    gravel.normalNode = bumpMap(stones.add(pebble.mul(0.5)), float(0.6));
+    const a = tex(ground, 0.9);
+    const b = tex(turned, 0.63);
+    const chip = a.g.min(b.g);
+    const tone = mix(a.a, b.a, step(b.g, a.g));
+    // Patchiness from damp, settling and vehicle wear at 3, 11 and 37 m, so the yard still reads
+    // as loose stone when the chips themselves are smaller than a pixel.
+    const wear = tex(ground, 3.1).b.mul(0.35).add(tex(turned, 11).r.mul(0.35)).add(tex(ground, 37).r.mul(0.3));
+    const lit = clamp(tone.mul(0.4).add(0.42).sub(chip.mul(0.3)).add(wear.sub(0.5).mul(0.6)), 0, 1);
+    gravel.colorNode = mix(color(0x47443e), color(0x9e998d), lit);
+    gravel.roughnessNode = float(0.92);
+    gravel.normalNode = bumpMap(float(1).sub(chip), float(0.5));
   }
 
   const asphalt = new THREE.MeshStandardNodeMaterial({ metalness: 0 });
-  asphalt.colorNode = mix(color(0x3b3c3d), color(0x4a4b4b), n3(0.5).mul(0.5).add(0.5));
+  asphalt.colorNode = mix(color(0x3a3b3c), color(0x4b4c4c), tex(ground, 6).b.mul(0.6).add(tex(turned, 40).r.mul(0.4)));
   asphalt.roughnessNode = float(0.86);
 
   // Grass with a field patchwork: each field gets its own tone, hedgerow lines darken the edges.
@@ -111,15 +125,17 @@ export function createMaterials(): Materials {
     // Neighbouring cells often share a tone, so fields read as irregular holdings, not a chequerboard.
     const big = floor(cell.div(vec2(2.0, 3.0)));
     const tone = mix(mx_cell_noise_float(vec3(cell.x, cell.y, 3.0)), mx_cell_noise_float(vec3(big.x, big.y, 7.0)), 0.65);
-    const regional = mx_fractal_noise_float(vec3(p.x, p.y, 0).mul(0.0011), 2, 2.0, 0.5);
+    const regional = tex(ground, 2400).r.sub(0.5).mul(2);
     const tilled = step(float(0.93), mx_cell_noise_float(vec3(cell.x, cell.y, 11.0)));
     const f = fract(vec2(p.x, p.y).div(fieldSize));
     const edge = max(abs(f.x.sub(0.5)), abs(f.y.sub(0.5)));
     const hedgeLine = smoothstep(float(0.485), float(0.497), edge);
-    const pasture = mix(color(0x55703a), color(0x748a40), tone).mul(regional.mul(0.18).add(1.0));
-    const base = mix(pasture, color(0x7b6c4c), tilled.mul(0.85));
-    const texture = mx_fractal_noise_float(vec3(p.x, p.y, 0).mul(0.6), 3, 2.0, 0.5);
-    grass.colorNode = mix(mix(base, base.mul(0.8), texture.mul(0.5).add(0.5)), color(0x2c3a1c), hedgeLine.mul(0.85));
+    // Irish pasture: muted greens that drift towards olive and straw, never a uniform lawn.
+    const pasture = mix(mix(color(0x55663a), color(0x72824a), tone), color(0x7d7e4c), smoothstep(float(0.2), float(1.0), regional).mul(0.35));
+    const base = mix(pasture.mul(regional.mul(0.1).add(1.0)), color(0x6e5f45), tilled.mul(0.85));
+    // Sward texture at two scales (tufts and grazing patches), from the noise texture.
+    const sward = tex(ground, 13).b.mul(0.6).add(tex(turned, 90).r.mul(0.4));
+    grass.colorNode = mix(mix(base.mul(0.78), base.mul(1.06), sward), color(0x2a361d), hedgeLine.mul(0.8));
     grass.roughnessNode = float(0.95);
   }
 
@@ -145,7 +161,7 @@ export function createMaterials(): Materials {
 
   const fanBlade = new THREE.MeshStandardNodeMaterial({ metalness: 0.6, roughness: 0.4, color: 0x3a3e40, side: THREE.DoubleSide });
   const hedge = new THREE.MeshStandardNodeMaterial({ metalness: 0, roughness: 0.95 });
-  hedge.colorNode = mix(color(0x23361a), color(0x3a4f22), n3(0.4).mul(0.5).add(0.5));
+  hedge.colorNode = mix(color(0x22331a), color(0x3b4f24), tex(vec2(positionWorld.x.add(positionWorld.y), positionWorld.z) as unknown as THREE.Node<'vec2'>, 4).r);
 
   return {
     galvanised, aluminium, conductor, porcelain, composite, tankPaint, cabinet, concrete, gravel, asphalt, grass,
