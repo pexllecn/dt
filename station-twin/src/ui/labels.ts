@@ -25,6 +25,8 @@ function text(id: ComponentId, s: SimState): { name: string; value: string; cls:
   return { name, value: `${Math.abs(c.mwNow).toFixed(0)} MW`, cls: c.live ? '' : 'dead' };
 }
 
+type Box = { x0: number; x1: number; y0: number; y1: number };
+
 const ARROW = '<svg viewBox="0 0 10 10"><path d="M1 5h7M5 1.8 8.3 5 5 8.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 export function attachLabels(stage: Stage, layer: HTMLElement, getState: () => SimState | null, getSelected: () => ComponentId | null, onClick: (id: ComponentId) => void): () => void {
@@ -47,17 +49,38 @@ export function attachLabels(stage: Stage, layer: HTMLElement, getState: () => S
     layer.appendChild(el);
     return { ...l, el };
   });
+  // Panel rectangles are read four times a second, not every frame: reading them forces the
+  // browser to finish layout, and it stalled every frame when done after the labels moved.
+  let panels: Box[] = [];
+  let panelsAt = -Infinity;
+  const readPanels = () => {
+    panels = [];
+    for (const sel2 of ['.top', '.dock:not(.closed)', '.insp', '.feed', '.rec', '.badge', '.toast', '.legend']) {
+      const el = document.querySelector(sel2);
+      if (el) { const r = el.getBoundingClientRect(); panels.push({ x0: r.left, x1: r.right, y0: r.top, y1: r.bottom }); }
+    }
+  };
+  // Labels move by transform only, which needs no layout. Writes are skipped when nothing changed.
+  const place = (el: HTMLElement, x: number, y: number) => {
+    // Snapped to device pixels so the text stays as crisp as it was when placed by layout.
+    const d = window.devicePixelRatio || 1;
+    const tr = `translate(${Math.round(x * d) / d}px, ${Math.round(y * d) / d}px) translate(-50%, -100%)`;
+    if (el.style.transform !== tr) el.style.transform = tr;
+  };
+  const show2 = (el: HTMLElement, on: boolean, pointer = true) => {
+    const o = on ? '1' : '0';
+    if (el.style.opacity !== o) el.style.opacity = o;
+    if (pointer) { const pe = on ? 'auto' : 'none'; if (el.style.pointerEvents !== pe) el.style.pointerEvents = pe; }
+  };
   return () => {
     const s = getState();
     if (!s) return;
     const far = stage.isNetworkScale();
     const sel = getSelected();
     const projected = stage.project(PRIORITY);
-    const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
-    for (const sel2 of ['.top', '.dock:not(.closed)', '.insp', '.feed', '.rec', '.badge', '.toast', '.legend']) {
-      const el = document.querySelector(sel2);
-      if (el) { const r = el.getBoundingClientRect(); placed.push({ x0: r.left, x1: r.right, y0: r.top, y1: r.bottom }); }
-    }
+    const now = performance.now();
+    if (now - panelsAt > 250) { readPanels(); panelsAt = now; }
+    const placed: Box[] = panels.slice();
     for (const p of projected) {
       const el = els.get(p.id)!;
       const isBus = p.id.startsWith('BUS') || p.id === 'BS220';
@@ -69,11 +92,9 @@ export function attachLabels(stage: Stage, layer: HTMLElement, getState: () => S
       const box = { x0: p.x - w / 2, x1: p.x + w / 2, y0: p.y - 26, y1: p.y };
       if (show && placed.some((b) => b.x0 < box.x1 && b.x1 > box.x0 && b.y0 < box.y1 && b.y1 > box.y0)) show = false;
       if (show) placed.push(box);
-      el.style.opacity = show ? '1' : '0';
-      el.style.pointerEvents = show ? 'auto' : 'none';
+      show2(el, show);
       if (!show) continue;
-      el.style.left = `${p.x.toFixed(1)}px`;
-      el.style.top = `${p.y.toFixed(1)}px`;
+      place(el, p.x, p.y);
       const t = text(p.id, s);
       // Flow lens: an arrow turned to the on-screen direction of flow (snapped to 5 degrees so it does not churn).
       const ang = stage.lens === 'flow' ? stage.flowArrow(p.id, p) : null;
@@ -89,8 +110,8 @@ export function attachLabels(stage: Stage, layer: HTMLElement, getState: () => S
       const box = { x0: p.x - w / 2, x1: p.x + w / 2, y0: p.y - 22, y1: p.y };
       if (show && placed.some((b) => b.x0 < box.x1 && b.x1 > box.x0 && b.y0 < box.y1 && b.y1 > box.y0)) show = false;
       if (show) placed.push(box);
-      l.el.style.opacity = show ? '1' : '0';
-      if (show) { l.el.style.left = `${p.x.toFixed(1)}px`; l.el.style.top = `${p.y.toFixed(1)}px`; }
+      show2(l.el, show, false);
+      if (show) place(l.el, p.x, p.y);
     }
   };
 }

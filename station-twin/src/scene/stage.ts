@@ -85,6 +85,20 @@ export class Stage {
   private stormLevel = -1;
   private slowFor = 0;
   private fastFor = 0;
+  /** A pixel ratio that proved too slow is not retried until this time (seconds of stage time). */
+  private prCeiling = Infinity;
+  private prRetryAt = 0;
+  private prBackoff = 30;
+  /** Shadows are redrawn only when what they show can have changed (see updateShadows). */
+  private shadowFit = new THREE.Vector4(NaN, 0, 0, 0);
+  private shadowSun = new THREE.Vector3();
+  private shadowFade = -1;
+  private shadowLens = '';
+  private shadowAge = 0;
+  private shadowDir = new THREE.Vector3();
+  private lastFrameAt = 0;
+  private envBakedAt = -Infinity;
+  private envTheme: Theme | null = null;
   /** Frame times (ms) since the last call to takeFrameTimes, for the bench. */
   private frameTimes: number[] = [];
   agentView: AgentView | null = null;
@@ -221,7 +235,11 @@ export class Stage {
     if (this.tier === 'low') { this.pipeline = null; return; }
     const pipeline = new THREE.RenderPipeline(this.renderer);
     const scenePass = pass(this.scene, this.camera);
-    scenePass.setMRT(mrt({ output, emissive, velocity }));
+    // TRAA is opt-in (?aa=traa) until verified on a GPU: under software rendering it produced uniform frames.
+    // Velocity is only written when TRAA needs it: a full-resolution target and a second
+    // transform per vertex that SMAA never reads.
+    const useTraa = new URLSearchParams(location.search).get('aa') === 'traa';
+    scenePass.setMRT(useTraa ? mrt({ output, emissive, velocity }) : mrt({ output, emissive }));
     const colour = scenePass.getTextureNode('output');
     const depth = scenePass.getTextureNode('depth');
     // Normals are reconstructed from depth, which saves a render target.
@@ -239,8 +257,6 @@ export class Stage {
     const graded = saturation(rgb.mul(vec3(0.42, 0.47, 0.6)), float(0.55));
     rgb = mix(rgb, graded, this.grade);
     const beauty = vec4(rgb, 1);
-    // TRAA is opt-in (?aa=traa) until verified on a GPU: under software rendering it produced uniform frames.
-    const useTraa = new URLSearchParams(location.search).get('aa') === 'traa';
     const aa = useTraa
       ? traa(beauty, depth, scenePass.getTextureNode('velocity'), this.camera)
       : smaa(beauty);
@@ -384,8 +400,8 @@ export class Stage {
     for (const k of ['turbidity', 'rayleigh', 'mieCoefficient', 'mieDirectionalG', 'cloudCoverage', 'cloudDensity']) dst[k]!.value = src[k]!.value;
     (dst.sunPosition!.value as THREE.Vector3).copy(src.sunPosition.value);
     (dst.showSunDisc as { value: number }).value = 0;
-    this.envTarget?.dispose();
-    this.envTarget = this.pmrem.fromScene(this.envScene, 0.04, 1, 30000);
+    // Bake into the same target each time: allocating a new one per bake caused a hitch.
+    this.envTarget = this.pmrem.fromScene(this.envScene, 0.04, 1, 30000, this.envTarget ? { renderTarget: this.envTarget } : {});
     this.scene.environment = this.envTarget.texture;
     this.scene.environmentIntensity = this.theme === 'control' ? 0.14 : 0.22;
   }
@@ -554,9 +570,19 @@ export class Stage {
     if (this.capture) return;
     const max = Math.min(window.devicePixelRatio, this.tier === 'high' ? 2 : 1.25);
     const pr = this.renderer.getPixelRatio();
-    if (dt > 1 / 40) { this.slowFor += dt; this.fastFor = 0; } else if (dt < 1 / 70) { this.fastFor += dt; this.slowFor = 0; } else { this.slowFor = 0; this.fastFor = 0; }
-    if (this.slowFor > 3 && pr > 0.75) { this.renderer.setPixelRatio(Math.max(0.75, pr - 0.25)); this.slowFor = 0; this.resize(); }
-    if (this.fastFor > 6 && pr < max) { this.renderer.setPixelRatio(Math.min(max, pr + 0.25)); this.fastFor = 0; this.resize(); }
+    // Ignore the first seconds (shader compilation) and isolated hitches: only sustained load counts.
+    if (this.time < 6 || dt >= 0.09) return;
+    if (dt > 1 / 40) { this.slowFor += dt; this.fastFor = 0; } else if (dt < 1 / 50) { this.fastFor += dt; this.slowFor = 0; } else { this.slowFor = 0; this.fastFor = 0; }
+    if (this.slowFor > 3 && pr > 0.75) {
+      // Remember the ratio that was too slow, so the stage does not oscillate between two
+      // ratios, reallocating every render target each time. Each repeat waits longer.
+      if (this.time < this.prRetryAt + 10) this.prBackoff = Math.min(600, this.prBackoff * 2);
+      this.prCeiling = pr;
+      this.prRetryAt = this.time + this.prBackoff;
+      this.renderer.setPixelRatio(Math.max(0.75, pr - 0.25)); this.slowFor = 0; this.resize();
+    }
+    const next = Math.min(max, pr + 0.25);
+    if (this.fastFor > 6 && pr < max && (next < this.prCeiling || this.time > this.prRetryAt)) { this.renderer.setPixelRatio(next); this.fastFor = 0; this.resize(); }
   }
 
   /** Frame times recorded since the last call (bench). */
@@ -588,12 +614,45 @@ export class Stage {
     }
   }
 
+  /**
+   * The shadow map covers up to three kilometres of scene at 4096 square, and redrawing it
+   * every frame was the largest single cost. It is redrawn at once when the frustum, the sun,
+   * the fold or the lens changes, and otherwise every third frame, which keeps rotor, fan and
+   * switching shadows moving. Capture mode redraws every frame.
+   */
+  private updateShadows(): void {
+    const shadow = this.sky.sun.shadow;
+    if (this.capture) { shadow.autoUpdate = true; return; }
+    shadow.autoUpdate = false;
+    const t = this.sky.sun.target.position;
+    const half = shadow.camera.right;
+    const dir = this.shadowDir.copy(this.sky.sun.position).sub(t).normalize();
+    let now = !(this.shadowFit.x === t.x && this.shadowFit.y === t.z && this.shadowFit.z === half);
+    if (dir.angleTo(this.shadowSun) > 2e-4) now = true;
+    if (this.sceneFade.value !== this.shadowFade || this.lens !== this.shadowLens) now = true;
+    if (now || ++this.shadowAge >= 3) {
+      shadow.needsUpdate = true;
+      this.shadowAge = 0;
+      this.shadowFit.set(t.x, t.z, half, 0);
+      this.shadowSun.copy(dir);
+      this.shadowFade = this.sceneFade.value;
+      this.shadowLens = this.lens;
+    }
+  }
+
   // ---------------------------------------------------------------------------------------
   // Loop
   // ---------------------------------------------------------------------------------------
 
   start(): void {
-    this.renderer.setAnimationLoop(() => this.frame());
+    // Frames are capped near 60 per second. On 120 Hz displays the browser offers twice as many,
+    // and drawing them all doubled the GPU load and made the pacing uneven, with no visible gain.
+    this.renderer.setAnimationLoop((now: number) => {
+      // The margin is wide so that timing jitter on a 60 Hz display never drops a frame.
+      if (now - this.lastFrameAt < 1000 / 90) return;
+      this.lastFrameAt = now;
+      this.frame();
+    });
   }
 
   /** Render one frame with a fixed step (capture mode). */
@@ -641,7 +700,11 @@ export class Stage {
       this.fold.update(this.state, dt);
       this.updateFold(wasMoving);
     }
-    if (this.needsEnv) { this.bakeEnvironment(); this.needsEnv = false; }
+    // During time-lapse the sun moves quickly: bake at most every two seconds (the sky keys are coarse anyway).
+    if (this.needsEnv && (this.capture || this.time - this.envBakedAt > 2 || this.envTheme !== this.theme)) {
+      this.bakeEnvironment(); this.needsEnv = false; this.envBakedAt = this.time; this.envTheme = this.theme;
+    }
+    if (this.state && this.renderer.shadowMap.enabled) this.updateShadows();
     if (this.selectionRing?.visible) {
       const m = this.selectionRing.material as THREE.MeshBasicNodeMaterial;
       m.opacity = 0.45 + 0.2 * Math.sin(this.time * 3);

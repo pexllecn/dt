@@ -360,6 +360,8 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
   bounds.set('GAS', new THREE.Box3(new THREE.Vector3(gs.x0 - 10, 0, gs.z0), new THREE.Vector3(gs.x1 + 10, 36, gs.z1)));
   const plumeN = 46;
   const plume = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), plumeMat, plumeN);
+  // Puffs start at zero scale, so bounds taken then would cull the plume for good.
+  plume.frustumCulled = false;
   plume.renderOrder = 5;
   group.add(plume);
   const plumeAge = Array.from({ length: plumeN }, (_, i) => i / plumeN);
@@ -514,6 +516,9 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
   const q = new THREE.Quaternion();
   const v = new THREE.Vector3();
   const sc = new THREE.Vector3();
+  const spin = new THREE.Matrix4();
+  const led = new THREE.Color();
+  const LED_OFF = new THREE.Color(0x000000), LED_HIGH = new THREE.Color(0x19d15a), LED_MID = new THREE.Color(0xffb020), LED_LOW = new THREE.Color(0xff3020);
   function update(state: SimState, dt: number, time: number): void {
     const C = state.C;
     // Wind turbines: rotor speed from the simulated wind (variable speed up to rated, feathered beyond cut-out).
@@ -523,7 +528,7 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
     const omega = (rpm * 2 * Math.PI) / 60;
     for (let i = 0; i < turbines.length; i++) {
       rotorAngle[i] = rotorAngle[i]! + omega * dt;
-      tmp.copy(tMats[i]!).multiply(rot.makeTranslation(hubOffset.x, hubOffset.y, hubOffset.z)).multiply(new THREE.Matrix4().makeRotationX(rotorAngle[i]!));
+      tmp.copy(tMats[i]!).multiply(rot.makeTranslation(hubOffset.x, hubOffset.y, hubOffset.z)).multiply(spin.makeRotationX(rotorAngle[i]!));
       rotors.setMatrixAt(i, tmp);
     }
     rotors.instanceMatrix.needsUpdate = true;
@@ -549,6 +554,9 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
       });
       panels.instanceMatrix.needsUpdate = true;
       legs.instanceMatrix.needsUpdate = true;
+      // The bounds were taken while the rows were folded away: recompute, or the farm stays culled.
+      panels.computeBoundingSphere();
+      legs.computeBoundingSphere();
     }
 
     // Battery: containers appear when built; status lights show state of charge and activity.
@@ -561,14 +569,15 @@ export function buildSurroundings(m: Materials, lineStarts: LineStart[], cableEn
         containers.setMatrixAt(i, k2 <= 0 ? zero : tmp.copy(mm).multiply(rot.makeScale(1, k2, 1)));
       });
       containers.instanceMatrix.needsUpdate = true;
+      containers.computeBoundingSphere();
     }
     batteryFixed.visible = C.BESS.installed;
     const soc = C.BESS.soc;
-    const ledColour = !C.BESS.installed ? new THREE.Color(0x000000) : soc > 60 ? new THREE.Color(0x19d15a) : soc > 25 ? new THREE.Color(0xffb020) : new THREE.Color(0xff3020);
+    const ledColour = !C.BESS.installed ? LED_OFF : soc > 60 ? LED_HIGH : soc > 25 ? LED_MID : LED_LOW;
     const active = Math.abs(C.BESS.mwNow) > 0.5;
     for (let i = 0; i < ledPos.length; i++) {
       const pulse = active ? 0.55 + 0.45 * Math.sin(time * 3 + i * 0.4) : 0.6;
-      leds.setColorAt(i, ledColour.clone().multiplyScalar(pulse));
+      leds.setColorAt(i, led.copy(ledColour).multiplyScalar(pulse));
     }
     if (leds.instanceColor) leds.instanceColor.needsUpdate = true;
 
