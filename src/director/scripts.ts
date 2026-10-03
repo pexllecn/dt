@@ -55,6 +55,12 @@ const ST = {
   arigna: [595_060, 816_167],
   carrick: [592_851, 798_678],
 } as const;
+// The framing used for the station close-up in the M4 screenshots.
+const flagfordSite = (() => {
+  const p = itm(-8.1239, 53.9117);
+  // Target a little towards the camera so the station sits above the caption.
+  return { e: p.e + 90, n: p.n - 150 };
+})();
 const mid = (a: readonly [number, number], b: readonly [number, number]) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as const;
 
 const sim = () => useSim.getState();
@@ -124,15 +130,15 @@ export const scripts: Record<ScenarioId, Script> = {
         title: 'Morning',
         shot: national,
         fly: 2,
-        hours: 6,
-        timeTo: 9,
+        hours: 7.5,
+        timeTo: 9.5,
         hold: 13,
         enter: () => {
           ensure('today');
           panels();
           select(null);
         },
-        caption: 'Six in the morning, a Wednesday in October. Demand is rising and wind is doing much of the work.',
+        caption: 'Half past seven on a Wednesday in October. Demand is rising and wind is doing much of the work.',
         narration: 'This is the all-island transmission system on an ordinary autumn day. Every line you see is a real route from open map data; every number is simulated, calibrated to public figures.',
       },
       {
@@ -140,7 +146,7 @@ export const scripts: Record<ScenarioId, Script> = {
         title: 'Dublin',
         shot: at(dub.e, dub.n, 70_000, 52, 160),
         fly: 4.5,
-        hours: 9,
+        hours: 9.5,
         timeTo: 12,
         hold: 13,
         caption: 'Dublin draws the largest share of demand. Data centres here take close to a fifth of the Republic’s electricity, day and night.',
@@ -160,7 +166,7 @@ export const scripts: Record<ScenarioId, Script> = {
       {
         id: 'agents',
         title: 'Agents',
-        shot: at(ST.flagford[0], ST.flagford[1], 650, 58, 150),
+        shot: { ...flagfordSite, dist: 650, polar: 58, az: 150 },
         fly: 5,
         hours: 15,
         timeTo: 16,

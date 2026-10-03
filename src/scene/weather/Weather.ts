@@ -80,7 +80,8 @@ export class Weather {
 
   /** Skip passes that would draw nothing (no fragment or vertex work at all). */
   setVisibility(altitude: number, exaggeration: number) {
-    this.cloudMesh.visible = weather.cloud.value > 0.05 && altitude > 2_600 * exaggeration * 2.5;
+    this.cloudMesh.visible = weather.cloud.value > 0.05 && altitude > 90_000;
+    void exaggeration;
     this.rain.visible = weather.rain.value > 0.01 && altitude < 45_000;
     this.streams.visible = weather.streams.value > 0.01 && altitude > 30_000;
   }
@@ -103,12 +104,14 @@ export class Weather {
     const density = smoothstep(float(1).sub(cover).sub(0.05), float(1).sub(cover).add(0.3), n);
     // Clouds thin out as the camera comes down through them, so close views stay clear.
     const height = float(2_600).mul(world.exaggeration);
-    const viewFade = smoothstep(height.mul(2.5), height.mul(8), world.altitude);
+    // Map scale only: regional and close views stay clear.
+    const viewFade = smoothstep(90_000, 180_000, world.altitude);
     // Fair-weather cloud is white; storm cloud darkens to slate.
     const fair = mix(vec3(0.97, 0.965, 0.95), vec3(0.6, 0.64, 0.68), smoothstep(0.6, 0.78, cover));
     const colour = mix(fair, vec3(0.17, 0.2, 0.24), world.themeMix);
     const shade = mix(float(0.78), float(1), smoothstep(0.3, 0.9, density));
-    mat.colorNode = vec4(colour.mul(shade), 1);
+    // Unlit material, so dim it with the daylight: no bright clouds over a night island.
+    mat.colorNode = vec4(colour.mul(shade).mul(mix(float(1), float(0.22), world.night)), 1);
     mat.opacityNode = density.mul(mix(float(0.42), float(0.32), world.themeMix)).mul(viewFade).mul(cover.mul(0.6).add(0.4));
     mat.positionNode = Fn(() => {
       const pos = attribute('position', 'vec3');

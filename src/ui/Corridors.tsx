@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { project } from '@/app/bridge';
 import { useSim } from '@/sim/client';
 import { SourceTag } from './SourceTag';
+import { demand } from '@/config/system';
 import { useUi } from './uiStore';
 
 function useCorridors() {
@@ -15,7 +16,6 @@ function useCorridors() {
 export function CorridorsPanel() {
   const list = useCorridors();
   const ui = useUi();
-  const dcShare = useSim((s) => (s.day ? Math.max(...s.day.series.dcShare) : 0));
   if (!list.length) return null;
   return (
     <section
@@ -28,7 +28,7 @@ export function CorridorsPanel() {
         <SourceTag s="Synthetic" />
       </div>
       <p className="mt-1 text-[11px] leading-snug text-ink-soft">
-        Data centre share {Math.round(dcShare * 100)}% of demand. Ranked by the strain growth adds since 2026: energy above rating over the day, after any single fault, with overloads with nothing out counted double.
+        Data centres reach {Math.round(demand.dcShare2034.value * 100)}% of annual demand by 2034 <SourceTag s={demand.dcShare2034.source} />. Ranked by the strain growth adds since 2026: energy above rating over the day, after any single fault, with overloads with nothing out counted double.
       </p>
       <ol className="mt-2">
         {list.map((c) => {

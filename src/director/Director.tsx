@@ -59,8 +59,9 @@ export function DirectorRuntime() {
     let last = performance.now();
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
-      // Clamp: a clock change (or a long pause) must never run the beat clock backwards.
-      const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
+      // Real elapsed time, so the beat clock keeps pace even on a slow machine. Never backwards
+      // (a clock change); a hidden tab resets the reference so returning does not jump ahead.
+      const dt = Math.max(0, Math.min(10, (now - last) / 1000));
       last = now;
       const d = useDirector.getState();
       if (d.mode !== 'director' || !useWorld.getState().ready) return;
@@ -88,8 +89,15 @@ export function DirectorRuntime() {
       if (d.beat + 1 < sc.beats.length) d.go(d.beat + 1);
       else useDirector.setState({ playing: false, waiting: false });
     };
+    const onVisible = () => {
+      last = performance.now();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   return null;
